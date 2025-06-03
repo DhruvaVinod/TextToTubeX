@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import SearchResults from '../search/SearchResults';
 import './Homepage.css';
+import Login from '../Login/Login';
 
 const Homepage = () => {
   const [isNavOpen, setIsNavOpen] = useState(false); // Closed by default now
@@ -8,6 +9,7 @@ const Homepage = () => {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [currentQuery, setCurrentQuery] = useState('');
   const [showLoginTag, setShowLoginTag] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
 
   const toggleNav = () => {
     setIsNavOpen(!isNavOpen);
@@ -17,18 +19,18 @@ const Homepage = () => {
     alert('Camera scan feature coming soon!');
   };
 
-//   const handleUploadFile = () => {
-//     const input = document.createElement('input');
-//     input.type = 'file';
-//     input.accept = 'image/*,.pdf,.txt';
-//     input.onchange = (e) => {
-//       const file = e.target.files[0];
-//       if (file) {
-//         alert(`File "${file.name}" selected! Processing feature coming soon.`);
-//       }
-//     };
-//     input.click();
-//   };
+  // const handleUploadFile = () => {
+  //   const input = document.createElement('input');
+  //   input.type = 'file';
+  //   input.accept = 'image/*,.pdf,.txt';
+  //   input.onchange = (e) => {
+  //     const file = e.target.files[0];
+  //     if (file) {
+  //       alert(`File "${file.name}" selected! Processing feature coming soon.`);
+  //     }
+  //   };
+  //   input.click();
+  // };
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -47,6 +49,17 @@ const Homepage = () => {
   const handleQuizzes = () => {
     alert('someone do this please heh');
   };
+  const handleSignIn = () => {
+    setShowLogin(true);
+    };
+
+  const handleSignUp = () => {
+      setShowLogin(true);
+  };
+
+  const handleBackFromLogin = () => {
+      setShowLogin(false);
+  };
 
   const handleLoginRequired = () => {
     // Highlight signup button
@@ -60,6 +73,7 @@ const Homepage = () => {
       signinBtn.style.animation = 'pulse 0.5s ease-in-out 3';
       
     }
+    
     
     // Show login tag
     setShowLoginTag(true);
@@ -84,6 +98,11 @@ const Homepage = () => {
         onBack={handleBackToHome}
       />
     );
+  }
+  if (showLogin) {
+  return (
+    <Login onBack={handleBackFromLogin} />
+  );
   }
 
   return (
@@ -161,8 +180,8 @@ const Homepage = () => {
           </div>
           
           <div className="header-right">
-            <button className="auth-btn signin">Sign In</button>
-            <button className="auth-btn signup">Sign Up</button>
+            <button className="auth-btn signin" onClick={handleSignIn}>Sign In</button>
+            <button className="auth-btn signup" onClick={handleSignUp}>Sign Up</button>
           </div>
         </header>
 
