@@ -6,9 +6,30 @@ const SearchResults = ({ searchQuery, onBack }) => {
   const [currentFactIndex, setCurrentFactIndex] = useState(0);
   const [showResults, setShowResults] = useState(false);
   const [showSummarySelection, setShowSummarySelection] = useState(false);
+  const [showLanguageSelection, setShowLanguageSelection] = useState(false);
   const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState(null);
+  const [selectedLanguage, setSelectedLanguage] = useState(null);
+  const [summaryData, setSummaryData] = useState(null);
+  const [videos, setVideos] = useState([]);
+  const [error, setError] = useState(null);
+
+  const languages = {
+    "English": "en",
+    "Hindi": "hi",
+    "Tamil": "ta",
+    "Telugu": "te",
+    "Kannada": "kn",
+    "Malayalam": "ml",
+    "Bengali": "bn",
+    "Gujarati": "gu",
+    "Marathi": "mr",
+    "Punjabi": "pa",
+    "Urdu": "ur",
+    "Odia": "or",
+    "Assamese": "as"
+  };
 
   const funFacts = [
     "Did you know? The human brain can process visual information 60,000 times faster than text!",
@@ -21,57 +42,135 @@ const SearchResults = ({ searchQuery, onBack }) => {
     "Amazing! Visual learners make up about 65% of the population."
   ];
 
-  const placeholderVideos = [
-    {
-      id: 1,
-      title: "vid",
-      channel: "rando",
-      duration: "12:45",
-      views: "0 views",
-      thumbnail: "thumbnail"
-    },
-    {
-      id: 2,
-      title: "vid",
-      channel: "rando",
-      duration: "12:45",
-      views: "10 views",
-      thumbnail: "thumbnail"
-    },
-    {
-      id: 3,
-      title: "vid",
-      channel: "rando",
-      duration: "12:45",
-      views: "1M views",
-      thumbnail: "thumbnail"
-    },
-    {
-      id: 4,
-      title: "vid",
-      channel: "rando",
-      duration: "12:45",
-      views: "1.2M views",
-      thumbnail: "thumbnail"
-    },
+  // Function to search YouTube videos
+  const searchYouTubeVideos = async (query) => {
+    try {
+      const response = await fetch('/api/search-videos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to search videos');
+      }
+
+      const data = await response.json();
+      return data.videos;
+    } catch (error) {
+      console.error('Error searching videos:', error);
+      throw error;
+    }
+  };
+
+  // Function to generate summary
+  const generateSummary = async (videoId, language) => {
+    try {
+      const response = await fetch('/api/generate-summary', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          video_id: videoId,
+          language: language
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate summary');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error generating summary:', error);
+      throw error;
+    }
+  };
+
+  // Function to format duration from YouTube API format
+  const formatDuration = (duration) => {
+    // YouTube API returns duration in ISO 8601 format (PT4M13S)
+    const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
     
-  ];
+    const hours = (match[1] || '').replace('H', '');
+    const minutes = (match[2] || '').replace('M', '');
+    const seconds = (match[3] || '').replace('S', '');
+    
+    let formattedDuration = '';
+    
+    if (hours) {
+      formattedDuration += `${hours}:`;
+    }
+    
+    if (minutes) {
+      formattedDuration += hours ? minutes.padStart(2, '0') : minutes;
+    } else {
+      formattedDuration += '0';
+    }
+    
+    formattedDuration += ':';
+    formattedDuration += seconds ? seconds.padStart(2, '0') : '00';
+    
+    return formattedDuration;
+  };
+
+  // Function to format view count
+  const formatViews = (viewCount) => {
+    const count = parseInt(viewCount);
+    if (count >= 1000000) {
+      return `${(count / 1000000).toFixed(1)}M views`;
+    } else if (count >= 1000) {
+      return `${(count / 1000).toFixed(1)}K views`;
+    } else {
+      return `${count} views`;
+    }
+  };
 
   useEffect(() => {
     const factInterval = setInterval(() => {
-  setCurrentFactIndex(() => Math.floor(Math.random() * funFacts.length));
-}, 4000); // 4ms ?
+      setCurrentFactIndex(() => Math.floor(Math.random() * funFacts.length));
+    }, 4000);
 
-    const loadingTimer = setTimeout(() => {
-      setIsLoading(false);
-      setShowResults(true);
-    }, 8000); // hard coded for now to check animations 
+    // Search for videos when component mounts
+    const loadVideos = async () => {
+      try {
+        setIsLoading(true);
+        const searchResults = await searchYouTubeVideos(searchQuery);
+        
+        // Transform the results to match our component structure
+        const transformedVideos = searchResults.map((video, index) => ({
+          id: video.id,
+          title: video.title,
+          channel: video.channelTitle,
+          duration: formatDuration(video.duration),
+          views: formatViews(video.viewCount),
+          thumbnail: video.thumbnailUrl,
+          description: video.description,
+          publishedAt: video.publishedAt,
+          relevanceScore: video.relevanceScore,
+          videoUrl: `https://www.youtube.com/watch?v=${video.id}`
+        }));
+
+        setVideos(transformedVideos);
+        setIsLoading(false);
+        setShowResults(true);
+      } catch (error) {
+        console.error('Error loading videos:', error);
+        setError('Failed to load videos. Please try again.');
+        setIsLoading(false);
+      }
+    };
+
+    loadVideos();
 
     return () => {
       clearInterval(factInterval);
-      clearTimeout(loadingTimer);
     };
-  }, []);
+  }, [searchQuery]);
 
   useEffect(() => {
     if (isGeneratingSummary) {
@@ -79,17 +178,26 @@ const SearchResults = ({ searchQuery, onBack }) => {
         setCurrentFactIndex(() => Math.floor(Math.random() * funFacts.length));
       }, 4000);
 
-      const summaryTimer = setTimeout(() => {
-        setIsGeneratingSummary(false);
-        setShowSummary(true);
-      }, 8000);
+      const processSummary = async () => {
+        try {
+          const summaryResult = await generateSummary(selectedVideo.id, selectedLanguage);
+          setSummaryData(summaryResult);
+          setIsGeneratingSummary(false);
+          setShowSummary(true);
+        } catch (error) {
+          console.error('Error processing summary:', error);
+          setError('Failed to generate summary. Please try again.');
+          setIsGeneratingSummary(false);
+        }
+      };
+
+      processSummary();
 
       return () => {
         clearInterval(factInterval);
-        clearTimeout(summaryTimer);
       };
     }
-  }, [isGeneratingSummary]);
+  }, [isGeneratingSummary, selectedVideo, selectedLanguage]);
 
   const handleGenerateSummary = () => {
     setShowSummarySelection(true);
@@ -98,23 +206,80 @@ const SearchResults = ({ searchQuery, onBack }) => {
   const handleVideoSelect = (video) => {
     setSelectedVideo(video);
     setShowSummarySelection(false);
+    setShowLanguageSelection(true);
+  };
+
+  const handleLanguageSelect = (languageCode, languageName) => {
+    setSelectedLanguage(languageCode);
+    setShowLanguageSelection(false);
     setIsGeneratingSummary(true);
   };
 
   const handleBackToSelection = () => {
     setShowSummary(false);
+    setShowLanguageSelection(false);
     setShowSummarySelection(false);
     setSelectedVideo(null);
+    setSelectedLanguage(null);
+    setSummaryData(null);
   };
 
   const handleChangeVideo = () => {
     setShowSummary(false);
+    setShowLanguageSelection(false);
     setShowSummarySelection(true);
+    setSelectedVideo(null);
+    setSelectedLanguage(null);
+    setSummaryData(null);
   };
 
   const handleReadyForQuiz = () => {
     alert('someone do the quiz page');
   };
+
+  const handleVideoClick = (video) => {
+    // Open YouTube video in new tab
+    window.open(video.videoUrl, '_blank');
+  };
+
+  const handleDownloadSummary = () => {
+    if (summaryData && summaryData.summary) {
+      const element = document.createElement('a');
+      const file = new Blob([summaryData.summary], { type: 'text/plain' });
+      element.href = URL.createObjectURL(file);
+      element.download = `${selectedVideo.title.substring(0, 50)}_summary.txt`;
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+    }
+  };
+
+  if (error) {
+    return (
+      <div className="search-results">
+        <div className="loading-container">
+          <div className="loading-header">
+            <button className="back-btn" onClick={onBack}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 12H5M12 19L5 12L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            <h2>Error occurred</h2>
+          </div>
+          
+          <div className="loading-content">
+            <div className="fun-fact">
+              <div className="fact-icon">❌</div>
+              <p className="fact-text">{error}</p>
+            </div>
+            <button className="change-video-btn" onClick={() => window.location.reload()}>
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -176,7 +341,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
               <div className="search-icon">📄</div>
             </div>
             
-            <h3>Creating your personalized summary...</h3>
+            <h3>Downloading video, generating and translating summary...</h3>
             
             <div className="fun-fact">
               <div className="fact-icon">💡</div>
@@ -194,6 +359,50 @@ const SearchResults = ({ searchQuery, onBack }) => {
     );
   }
 
+  if (showLanguageSelection) {
+    return (
+      <div className="search-results">
+        <div className="results-header">
+          <button className="back-btn" onClick={handleBackToSelection}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M19 12H5M12 19L5 12L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+          <h2>Choose Language for Summary</h2>
+        </div>
+
+        <div className="results-content">
+          <div className="selected-video-info">
+            <div className="video-thumbnail">
+              <img 
+                src={selectedVideo.thumbnail} 
+                alt={selectedVideo.title}
+                className="thumbnail-image"
+              />
+            </div>
+            <div className="video-details">
+              <h3>{selectedVideo.title}</h3>
+              <p>{selectedVideo.channel}</p>
+            </div>
+          </div>
+
+          <div className="language-grid">
+            {Object.entries(languages).map(([languageName, languageCode]) => (
+              <button 
+                key={languageCode}
+                className="language-card"
+                onClick={() => handleLanguageSelect(languageCode, languageName)}
+              >
+                <div className="language-name">{languageName}</div>
+                <div className="language-code">{languageCode.toUpperCase()}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (showSummarySelection) {
     return (
       <div className="search-results">
@@ -203,15 +412,24 @@ const SearchResults = ({ searchQuery, onBack }) => {
               <path d="M19 12H5M12 19L5 12L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
-          <h2>create summary for which video ?</h2>
+          <h2>Create summary for which video?</h2>
         </div>
 
         <div className="results-content">
           <div className="video-grid">
-            {placeholderVideos.map((video) => (
+            {videos.map((video) => (
               <div key={video.id} className="video-card" onClick={() => handleVideoSelect(video)}>
                 <div className="video-thumbnail">
-                  <div className="thumbnail-icon">{video.thumbnail}</div>
+                  <img 
+                    src={video.thumbnail} 
+                    alt={video.title}
+                    className="thumbnail-image"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                  <div className="thumbnail-icon" style={{ display: 'none' }}>🎥</div>
                   <div className="video-duration">{video.duration}</div>
                 </div>
                 <div className="video-info">
@@ -237,7 +455,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
             </svg>
           </button>
           <h2>Summary for: "{selectedVideo?.title}"</h2>
-          <button className="download-btn">
+          <button className="download-btn" onClick={handleDownloadSummary}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M21 15V19A2 2 0 0 1 19 21H5A2 2 0 0 1 3 19V15M7 10L12 15L17 10M12 15V3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
@@ -247,7 +465,31 @@ const SearchResults = ({ searchQuery, onBack }) => {
         <div className="results-content">
           <div className="summary-container">
             <div className="summary-content">
-              <p>this is where summary should come...</p>
+              {summaryData ? (
+                <div>
+                  <div className="summary-info">
+                    <p><strong>Language:</strong> {Object.keys(languages).find(key => languages[key] === selectedLanguage)}</p>
+                    <p><strong>Video Duration:</strong> {selectedVideo.duration}</p>
+                    <p><strong>Channel:</strong> {selectedVideo.channel}</p>
+                  </div>
+                  <div className="summary-text">
+                    <h4>Summary:</h4>
+                    <p>{summaryData.summary}</p>
+                  </div>
+                  {summaryData.key_points && (
+                    <div className="key-points">
+                      <h4>Key Points:</h4>
+                      <ul>
+                        {summaryData.key_points.map((point, index) => (
+                          <li key={index}>{point}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <p>Loading summary...</p>
+              )}
             </div>
             
             <div className="summary-actions">
@@ -274,11 +516,25 @@ const SearchResults = ({ searchQuery, onBack }) => {
 
       <div className="results-content">
         <div className="video-grid">
-          {placeholderVideos.map((video) => (
-            <div key={video.id} className="video-card" onClick={() => alert(`Selected: ${video.title}`)}>
+          {videos.map((video) => (
+            <div key={video.id} className="video-card" onClick={() => handleVideoClick(video)}>
               <div className="video-thumbnail">
-                <div className="thumbnail-icon">{video.thumbnail}</div>
+                <img 
+                  src={video.thumbnail} 
+                  alt={video.title}
+                  className="thumbnail-image"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+                <div className="thumbnail-icon" style={{ display: 'none' }}>🎥</div>
                 <div className="video-duration">{video.duration}</div>
+                {video.relevanceScore && (
+                  <div className="relevance-score">
+                    {Math.round(video.relevanceScore * 100)}% match
+                  </div>
+                )}
               </div>
               <div className="video-info">
                 <h3 className="video-title">{video.title}</h3>

@@ -1,13 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import SearchResults from '../search/SearchResults';
+import StudyPlanner from '../studyplanner/StudyPlanner'; 
+import Login from '../Login/Login';
 import './Homepage.css';
+import { useNavigate } from 'react-router-dom';
 
 const Homepage = () => {
-  const [isNavOpen, setIsNavOpen] = useState(false); // Closed by default now
+  const [isNavOpen, setIsNavOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
+  const [showStudyPlanner, setShowStudyPlanner] = useState(false);
   const [currentQuery, setCurrentQuery] = useState('');
   const [showLoginTag, setShowLoginTag] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const navigate = useNavigate();
 
   const toggleNav = () => {
     setIsNavOpen(!isNavOpen);
@@ -16,19 +22,6 @@ const Homepage = () => {
   const handleScanText = () => {
     alert('Camera scan feature coming soon!');
   };
-
-//   const handleUploadFile = () => {
-//     const input = document.createElement('input');
-//     input.type = 'file';
-//     input.accept = 'image/*,.pdf,.txt';
-//     input.onchange = (e) => {
-//       const file = e.target.files[0];
-//       if (file) {
-//         alert(`File "${file.name}" selected! Processing feature coming soon.`);
-//       }
-//     };
-//     input.click();
-//   };
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -40,12 +33,30 @@ const Homepage = () => {
 
   const handleBackToHome = () => {
     setShowSearchResults(false);
+    setShowStudyPlanner(false); 
     setCurrentQuery('');
     setSearchText('');
   };
 
   const handleQuizzes = () => {
     alert('someone do this please heh');
+  };
+
+  const handleStudyPlanner = () => {
+    setShowStudyPlanner(true);
+    setIsNavOpen(false); // Close sidebar when navigating
+  };
+
+  const handleBackFromStudyPlanner = () => {
+    setShowStudyPlanner(false);
+  };
+
+  const handleSignUp = () => {
+      setShowLogin(true);
+  };
+
+  const handleBackFromLogin = () => {
+  setShowLogin(false);
   };
 
   const handleLoginRequired = () => {
@@ -61,10 +72,8 @@ const Homepage = () => {
       
     }
     
-    // Show login tag
     setShowLoginTag(true);
     
-    // Hide tag and remove animation after 3 seconds
     setTimeout(() => {
       setShowLoginTag(false);
       if (signupBtn) {
@@ -74,8 +83,12 @@ const Homepage = () => {
         signinBtn.style.animation = '';
       }
     }, 3000);
-    
   };
+
+  // Add condition to show StudyPlanner component
+  if (showStudyPlanner) {
+    return <StudyPlanner onBack={handleBackFromStudyPlanner} />;
+  }
 
   if (showSearchResults) {
     return (
@@ -84,6 +97,11 @@ const Homepage = () => {
         onBack={handleBackToHome}
       />
     );
+  }
+  if (showLogin) {
+  return (
+    <Login onBack={handleBackFromLogin} />
+  );
   }
 
   return (
@@ -119,14 +137,21 @@ const Homepage = () => {
               <span>Leaderboards</span>
             </div>
             
-            <div className="nav-item" onClick={handleLoginRequired}>
-              <div className="nav-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 2V5M16 2V5M3.5 9.09H20.5M21 8.5V17C21 18.1046 20.1046 19 19 19H5C3.89543 19 3 18.1046 3 17V8.5C3 7.39543 3.89543 6.5 5 6.5H19C20.1046 6.5 21 7.39543 21 8.5Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+            <div className="nav-item" onClick={() => {
+              const user = localStorage.getItem('user');
+              if (!user) { alert('Please sign in to access your study plans.');
+                return;
+              }
+              navigate('/my-study-plans');
+              }}
+>
+            <div className="nav-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 4H21V6H3V4ZM3 10H21V12H3V10ZM3 16H15V18H3V16Z" fill="currentColor" />
+              </svg>
               </div>
-              <span>Study Planner</span>
-            </div>
+              <span>My Study Plans</span>
+              </div>
           </nav>
         </div>
       </div>
@@ -161,8 +186,8 @@ const Homepage = () => {
           </div>
           
           <div className="header-right">
-            <button className="auth-btn signin">Sign In</button>
-            <button className="auth-btn signup">Sign Up</button>
+            <button className="auth-btn signin" onClick={() => setShowLogin(true)}>Sign In</button>
+            <button className="auth-btn signup" onClick={handleSignUp}>Sign Up</button>
           </div>
         </header>
 
@@ -214,7 +239,8 @@ const Homepage = () => {
 
             {/* Feature Cards */}
             <div className="feature-cards">
-              <div className="feature-card">
+              {/* Update this feature card to be clickable */}
+              <div className="feature-card" onClick={handleStudyPlanner} style={{ cursor: 'pointer' }}>
                 <div className="feature-icon">📚</div>
                 <h3>Study Planner</h3>
                 <p>Use the website's study planner to effectively plan your adventure</p>
