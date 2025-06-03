@@ -3,11 +3,7 @@ import SearchResults from '../search/SearchResults';
 import StudyPlanner from '../studyplanner/StudyPlanner'; 
 import Login from '../Login/Login';
 import './Homepage.css';
-<<<<<<< HEAD
 import { useNavigate } from 'react-router-dom';
-=======
-import Login from '../Login/Login';
->>>>>>> 89a6c2944590f53e4696596168c30f46f5300e16
 
 const Homepage = () => {
   const [isNavOpen, setIsNavOpen] = useState(false);
@@ -17,10 +13,7 @@ const Homepage = () => {
   const [currentQuery, setCurrentQuery] = useState('');
   const [showLoginTag, setShowLoginTag] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
-<<<<<<< HEAD
   const navigate = useNavigate();
-=======
->>>>>>> 89a6c2944590f53e4696596168c30f46f5300e16
 
   const toggleNav = () => {
     setIsNavOpen(!isNavOpen);
@@ -30,22 +23,6 @@ const Homepage = () => {
     alert('Camera scan feature coming soon!');
   };
 
-<<<<<<< HEAD
-=======
-  // const handleUploadFile = () => {
-  //   const input = document.createElement('input');
-  //   input.type = 'file';
-  //   input.accept = 'image/*,.pdf,.txt';
-  //   input.onchange = (e) => {
-  //     const file = e.target.files[0];
-  //     if (file) {
-  //       alert(`File "${file.name}" selected! Processing feature coming soon.`);
-  //     }
-  //   };
-  //   input.click();
-  // };
-
->>>>>>> 89a6c2944590f53e4696596168c30f46f5300e16
   const handleSearch = (e) => {
     e.preventDefault();
     if (searchText.trim()) {
@@ -85,13 +62,6 @@ const Homepage = () => {
     setShowStudyPlanner(false);
   };
 
-  const handleSignUp = () => {
-      setShowLogin(true);
-  };
-
-  const handleBackFromLogin = () => {
-  setShowLogin(false);
-  };
 
   const handleLoginRequired = () => {
     // Highlight signup button
@@ -106,11 +76,6 @@ const Homepage = () => {
       
     }
     
-<<<<<<< HEAD
-=======
-    
-    // Show login tag
->>>>>>> 89a6c2944590f53e4696596168c30f46f5300e16
     setShowLoginTag(true);
     
     setTimeout(() => {
@@ -225,11 +190,7 @@ const Homepage = () => {
           </div>
           
           <div className="header-right">
-<<<<<<< HEAD
             <button className="auth-btn signin" onClick={() => setShowLogin(true)}>Sign In</button>
-=======
-            <button className="auth-btn signin" onClick={handleSignIn}>Sign In</button>
->>>>>>> 89a6c2944590f53e4696596168c30f46f5300e16
             <button className="auth-btn signup" onClick={handleSignUp}>Sign Up</button>
           </div>
         </header>
