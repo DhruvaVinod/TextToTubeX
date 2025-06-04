@@ -12,4 +12,6 @@ Then run:
 
 ```bash
 npm install
+npm install firebase 
+npm install -g firebase-tools
 npm start

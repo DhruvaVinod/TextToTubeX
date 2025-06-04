@@ -10,7 +10,6 @@ deep-translator==1.11.4
 yt-dlp==2025.5.22
 pathlib==1.0.1
 openai-whisper
-whisper
 opencv-python 
 easyocr 
 pillow 

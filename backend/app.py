@@ -22,6 +22,7 @@ import base64
 from PIL import Image
 import io
 
+
 from dotenv import load_dotenv
 load_dotenv()
 
