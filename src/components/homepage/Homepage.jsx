@@ -13,15 +13,83 @@ const Homepage = () => {
   const [currentQuery, setCurrentQuery] = useState('');
   const [showLoginTag, setShowLoginTag] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [cameraStream, setCameraStream] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+
   const navigate = useNavigate();
 
   const toggleNav = () => {
     setIsNavOpen(!isNavOpen);
   };
 
-  const handleScanText = () => {
-    alert('Camera scan feature coming soon!');
-  };
+  const handleScanText = async () => {
+  try {
+    setShowCamera(true);
+    const stream = await navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: 'environment' } // Use back camera on mobile
+    });
+    setCameraStream(stream);
+  } catch (error) {
+    console.error('Error accessing camera:', error);
+    alert('Camera access denied or not available');
+    setShowCamera(false);
+  }
+};
+  const captureImage = async () => {
+  if (!cameraStream) return;
+  
+  setIsProcessing(true);
+  
+  try {
+    const video = document.getElementById('cameraVideo');
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0);
+    
+    // Convert to base64
+    const imageData = canvas.toDataURL('image/jpeg', 0.8);
+    
+    // Send to backend for OCR
+    const response = await fetch('http://localhost:5000/api/camera-capture', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ image: imageData }),
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      setSearchText(data.text || '');
+      closeCamera();
+      if (data.text) {
+        alert(`Text extracted successfully! ${data.confidence ? `Confidence: ${(data.confidence * 100).toFixed(1)}%` : ''}`);
+      } else {
+        alert(data.message || 'No text found in the image');
+      }
+    } else {
+      throw new Error(data.error || 'Failed to process image');
+    }
+  } catch (error) {
+    console.error('Error processing captured image:', error);
+    alert('Failed to extract text from image: ' + error.message);
+  } finally {
+    setIsProcessing(false);
+  }
+};
+
+const closeCamera = () => {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop());
+    setCameraStream(null);
+  }
+  setShowCamera(false);
+};
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -37,7 +105,44 @@ const Homepage = () => {
     setCurrentQuery('');
     setSearchText('');
   };
-
+  const handleFileUpload = (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  // Check if it's an image
+  if (!file.type.startsWith('image/')) {
+    alert('Please select an image file');
+    return;
+  }
+  
+  setIsProcessing(true);
+  
+  const formData = new FormData();
+  formData.append('image', file);
+  
+  fetch('http://localhost:5000/api/upload-image', {
+    method: 'POST',
+    body: formData,
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.text) {
+      setSearchText(data.text);
+      alert(`Text extracted successfully from ${data.filename}! ${data.confidence ? `Confidence: ${(data.confidence * 100).toFixed(1)}%` : ''}`);
+    } else {
+      alert(data.message || 'No text found in the image');
+    }
+  })
+  .catch(error => {
+    console.error('Error uploading file:', error);
+    alert('Failed to process uploaded image: ' + error.message);
+  })
+  .finally(() => {
+    setIsProcessing(false);
+    // Clear the file input
+    event.target.value = '';
+  });
+};
   const handleQuizzes = () => {
     alert('someone do this please heh');
   };
@@ -230,7 +335,7 @@ const Homepage = () => {
                   Scan Text
                 </button>
                 
-                <button type="button" className="action-btn upload-btn" onClick={handleScanText}>
+                <button type="button" className="action-btn upload-btn" onClick={() => document.getElementById('fileInput').click()}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 19V15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                     <polyline points="17,8 12,3 7,8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -260,6 +365,47 @@ const Homepage = () => {
                 <p>Generate personalized quizzes from your materials</p>
               </div>
             </div>
+            {showCamera && (
+  <div className="camera-overlay">
+    <div className="camera-container">
+      <div className="camera-header">
+        <h3>Capture Text</h3>
+        <button className="close-camera-btn" onClick={closeCamera}>✕</button>
+      </div>
+      <video
+        id="cameraVideo"
+        ref={(video) => {
+          if (video && cameraStream) {
+            video.srcObject = cameraStream;
+            video.play();
+          }
+        }}
+        className="camera-video"
+        playsInline
+        muted
+      />
+      <div className="camera-controls">
+        <button 
+          className="capture-btn" 
+          onClick={captureImage}
+          disabled={isProcessing}
+        >
+          {isProcessing ? 'Processing...' : 'Capture & Extract Text'}
+        </button>
+        <button className="cancel-btn" onClick={closeCamera}>Cancel</button>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* Hidden file input for upload */}
+<input
+  type="file"
+  id="fileInput"
+  accept="image/*"
+  onChange={handleFileUpload}
+  style={{ display: 'none' }}
+/>
           </div>
         </main>
       </div>

@@ -16,6 +16,11 @@ from pathlib import Path
 import google.generativeai as genai
 from deep_translator import GoogleTranslator, exceptions as dt_exceptions
 import whisper
+import cv2
+import easyocr
+import base64
+from PIL import Image
+import io
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -32,7 +37,7 @@ model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # API Keys configuration
 YOUTUBE_API_KEY = 'AIzaSyD6hKgUxy-91DW8AnaTrc7nvDHUfWazi_0'
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')  # Add your Gemini API key to .env file
+GEMINI_API_KEY = "AIzaSyDDwEucj4KNsnUT4m4qpt1pwnByhm6_vjM"  # Add your Gemini API key to .env file
 
 # YouTube API URLs
 YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
@@ -514,6 +519,116 @@ def cleanup_processor(exception):
     global video_processor
     if video_processor:
         video_processor.cleanup()
+@app.route('/api/camera-capture', methods=['POST'])
+def camera_capture():
+    """
+    API endpoint to capture image from webcam and extract text
+    """
+    try:
+        data = request.get_json()
+        if not data or 'image' not in data:
+            return jsonify({
+                'error': 'Image data is required'
+            }), 400
+        
+        # Decode base64 image
+        image_data = data['image'].split(',')[1]  # Remove data:image/jpeg;base64, prefix
+        image_bytes = base64.b64decode(image_data)
+        
+        # Convert to OpenCV format
+        image = Image.open(io.BytesIO(image_bytes))
+        image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        
+        # Convert to grayscale for better OCR
+        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+        
+        # Initialize EasyOCR reader
+        reader = easyocr.Reader(['en'])
+        
+        # Perform OCR
+        results = reader.readtext(gray)
+        
+        if not results:
+            return jsonify({
+                'text': '',
+                'message': 'No text found in the image'
+            })
+        
+        # Extract and join all detected text
+        extracted_text = " ".join([res[1] for res in results])
+        
+        return jsonify({
+            'text': extracted_text,
+            'confidence': sum([res[2] for res in results]) / len(results) if results else 0
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in camera capture endpoint: {e}")
+        return jsonify({
+            'error': str(e)
+        }), 500
+
+@app.route('/api/upload-image', methods=['POST'])
+def upload_image():
+    """
+    API endpoint to upload image file and extract text
+    """
+    try:
+        if 'image' not in request.files:
+            return jsonify({
+                'error': 'No image file uploaded'
+            }), 400
+        
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({
+                'error': 'No file selected'
+            }), 400
+        
+        # Check if file is an image
+        allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'}
+        if not ('.' in file.filename and 
+                file.filename.rsplit('.', 1)[1].lower() in allowed_extensions):
+            return jsonify({
+                'error': 'Invalid file type. Please upload an image file.'
+            }), 400
+        
+        # Read image data
+        image_data = file.read()
+        
+        # Convert to OpenCV format
+        image = Image.open(io.BytesIO(image_data))
+        image_cv = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+        
+        # Convert to grayscale for better OCR
+        gray = cv2.cvtColor(image_cv, cv2.COLOR_BGR2GRAY)
+        
+        # Initialize EasyOCR reader
+        reader = easyocr.Reader(['en'])
+        
+        # Perform OCR
+        results = reader.readtext(gray)
+        
+        if not results:
+            return jsonify({
+                'text': '',
+                'message': 'No text found in the image'
+            })
+        
+        # Extract and join all detected text
+        extracted_text = " ".join([res[1] for res in results])
+        
+        return jsonify({
+            'text': extracted_text,
+            'confidence': sum([res[2] for res in results]) / len(results) if results else 0,
+            'filename': file.filename
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in upload image endpoint: {e}")
+        return jsonify({
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
