@@ -3,13 +3,12 @@ import {
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
   signInWithPopup,
-  signOut,
-  onAuthStateChanged,
   updateProfile,
   sendEmailVerification,
   reload
 } from 'firebase/auth';
 import { auth, googleProvider } from '../../firebase';
+import { useAuth } from '../../context/AuthContext';
 import './Login.css';
 
 const Login = ({ onBack }) => {
@@ -18,21 +17,20 @@ const Login = ({ onBack }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [verificationSent, setVerificationSent] = useState(false);
   const [checkingVerification, setCheckingVerification] = useState(false);
 
-  // Listen for authentication state changes
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-    });
+  // Use the global auth context
+  const { currentUser, logout, isAuthenticated } = useAuth();
 
-    return () => unsubscribe(); // Cleanup subscription
-  }, []);
+  // Redirect to homepage if user is authenticated and verified
+  useEffect(() => {
+    if (isAuthenticated) {
+      onBack(); // This will take them back to homepage
+    }
+  }, [isAuthenticated, onBack]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -84,6 +82,9 @@ const Login = ({ onBack }) => {
         if (!userCredential.user.emailVerified) {
           throw new Error('Please verify your email before signing in. Check your inbox for the verification link.');
         }
+
+        // If we get here, user is authenticated and verified
+        // The useEffect will handle the redirect
       }
     } catch (error) {
       console.error('Authentication error:', error);
@@ -99,8 +100,8 @@ const Login = ({ onBack }) => {
     
     try {
       const result = await signInWithPopup(auth, googleProvider);
-      // Google accounts are automatically verified
       console.log('Google login successful:', result.user.email);
+      // The useEffect will handle the redirect since Google accounts are automatically verified
     } catch (error) {
       console.error('Google login error:', error);
       setError(error.message);
@@ -111,7 +112,7 @@ const Login = ({ onBack }) => {
 
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      await logout();
       // Reset form states
       setUsername('');
       setEmail('');
@@ -125,13 +126,13 @@ const Login = ({ onBack }) => {
   };
 
   const handleResendVerification = async () => {
-    if (!user) return;
+    if (!currentUser) return;
     
     setLoading(true);
     setError('');
     
     try {
-      await sendEmailVerification(user);
+      await sendEmailVerification(currentUser);
       alert('Verification email sent! Please check your inbox.');
     } catch (error) {
       console.error('Resend verification error:', error);
@@ -142,17 +143,18 @@ const Login = ({ onBack }) => {
   };
 
   const handleCheckVerification = async () => {
-    if (!user) return;
+    if (!currentUser) return;
     
     setCheckingVerification(true);
     setError('');
     
     try {
       // Reload user to get latest verification status
-      await reload(user);
+      await reload(currentUser);
       
-      if (user.emailVerified) {
+      if (currentUser.emailVerified) {
         alert('Email verified successfully! Welcome to TextToTube!');
+        // The useEffect will handle the redirect
       } else {
         setError('Email not yet verified. Please check your inbox and click the verification link.');
       }
@@ -165,7 +167,7 @@ const Login = ({ onBack }) => {
   };
 
   // Show verification pending screen if user exists but email not verified
-  if (user && !user.emailVerified) {
+  if (currentUser && !currentUser.emailVerified) {
     return (
       <div className="login-page">
         <div className="login-container">
@@ -180,7 +182,7 @@ const Login = ({ onBack }) => {
             <div className="login-header">
               <h1 className="app-title">TextToTube</h1>
               <h2>Verify Your Email</h2>
-              <p>We've sent a verification link to {user.email}</p>
+              <p>We've sent a verification link to {currentUser.email}</p>
             </div>
 
             {error && (
@@ -251,36 +253,6 @@ const Login = ({ onBack }) => {
               </p>
             </div>
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show dashboard if user is authenticated and verified
-  if (user && user.emailVerified) {
-    return (
-      <div className="dashboard">
-        <div className="dashboard-header">
-          <div>
-            <h1>Welcome, {user.displayName || user.email}!</h1>
-            <p style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '14px', margin: '5px 0 0 0' }}>
-              {user.email} ✅ Verified
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button className="back-btn" onClick={handleSignOut}>
-              Sign Out
-            </button>
-            <button className="back-btn" onClick={onBack}>
-              Back to Home
-            </button>
-          </div>
-        </div>
-        <div className="dashboard-content">
-          <p>Dashboard content will be added here later...</p>
-          <p style={{ marginTop: '20px', fontSize: '14px' }}>
-            User ID: {user.uid}
-          </p>
         </div>
       </div>
     );

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import './StudyPlanner.css';
+import './StudyPlans.css';
 import { useNavigate } from 'react-router-dom';
 
 const MyStudyPlans = () => {

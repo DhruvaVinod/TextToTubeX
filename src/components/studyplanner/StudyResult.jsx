@@ -135,7 +135,7 @@ const StudyResult = () => {
 
   const handleSave = () => {
     
-    const user = JSON.parse(localStorage.getItem('loggedInUser')); // Adjust key if needed
+    const user = JSON.parse(localStorage.getItem('user')); // Adjust key if needed
 
     if (!user || !user.email) {
       alert('Please sign in to save your study plan.');
