@@ -358,15 +358,15 @@ const StudyResult = () => {
 
         {/* Study Plan Content */}
         {(viewMode === 'plan' || viewMode === 'combined') && (
-          <div className="plan-content enhanced">
+          <div className="plan-content enhanced left-aligned">
             <h3 className="section-title">📚 Your Detailed Study Plan</h3>
-            <div className="plan-text" dangerouslySetInnerHTML={{ __html: plan }} />
+            <div className="plan-text formatted" dangerouslySetInnerHTML={{ __html: plan }} />
           </div>
         )}
 
         {/* Action Buttons */}
         <div className="action-section">
-          <div className="button-group">
+          <div className="button-group horizontal">
             <button className="action-btn primary" onClick={handleSave}>
               <span className="btn-icon">💾</span>
               Save Progress
