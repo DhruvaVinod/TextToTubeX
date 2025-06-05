@@ -15,6 +15,9 @@ const SearchResults = ({ searchQuery, onBack }) => {
   const [videos, setVideos] = useState([]);
   const [error, setError] = useState(null);
 
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
   const languages = {
     "English": "en",
     "Hindi": "hi",
@@ -41,6 +44,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
     "Fun fact: The human attention span averages 8 seconds, but videos can hold it longer!",
     "Amazing! Visual learners make up about 65% of the population."
   ];
+
 
   // Function to search YouTube videos
   const searchYouTubeVideos = async (query) => {
@@ -241,6 +245,48 @@ const SearchResults = ({ searchQuery, onBack }) => {
     // Open YouTube video in new tab
     window.open(video.videoUrl, '_blank');
   };
+
+  const handleSaveSummary = async () => {
+  const user = localStorage.getItem('user');
+  if (!user || !summaryData || !selectedVideo) {
+    alert('Please make sure you are logged in and have a summary to save.');
+    return;
+  }
+
+  try {
+    setIsSaving(true);
+    
+    const summaryToSave = {
+      id: Date.now(), // Add unique ID
+      userId: user, // Use the user from localStorage
+      videoId: selectedVideo.id,
+      videoTitle: selectedVideo.title,
+      videoChannel: selectedVideo.channel,
+      videoDuration: selectedVideo.duration,
+      videoThumbnail: selectedVideo.thumbnail,
+      videoUrl: selectedVideo.videoUrl,
+      language: selectedLanguage,
+      languageName: Object.keys(languages).find(key => languages[key] === selectedLanguage),
+      content: summaryData.summary,
+      keyPoints: summaryData.key_points || [],
+      createdAt: new Date().toISOString(),
+      searchQuery: searchQuery // Add original search query
+    };
+
+    const savedSummaries = JSON.parse(localStorage.getItem('savedSummaries') || '[]');
+    savedSummaries.push(summaryToSave);
+    localStorage.setItem('savedSummaries', JSON.stringify(savedSummaries));
+
+    setIsSaved(true);
+    alert('Summary saved successfully!');
+  } catch (error) {
+    console.error('Error saving summary:', error);
+    alert('Failed to save summary. Please try again.');
+  } finally {
+    setIsSaving(false);
+  }
+};
+ 
 
   const handleDownloadSummary = () => {
     if (summaryData && summaryData.summary) {
@@ -496,7 +542,14 @@ const SearchResults = ({ searchQuery, onBack }) => {
               <button className="change-video-btn" onClick={handleChangeVideo}>
                 Change Video
               </button>
-            </div>
+            <button 
+            className={`save-btn ${isSaved ? 'saved' : ''}`}
+            onClick={handleSaveSummary}
+            disabled={isSaving || isSaved}
+            >
+              {isSaving ? 'Saving...' : isSaved ? 'Saved ✓' : 'Save Summary'}
+            </button>
+          </div>
           </div>
         </div>
       </div>

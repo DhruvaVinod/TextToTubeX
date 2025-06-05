@@ -244,14 +244,20 @@ const Homepage = () => {
               <span>Quizzes</span>
             </div>
             
-            <div className="nav-item" onClick={isAuthenticated ? () => alert('Previous Summaries feature coming soon!') : handleLoginRequired}>
+            <div className="nav-item" onClick={() => {
+              if (!isAuthenticated) { 
+                handleLoginRequired();
+                return;
+              }
+              navigate('/previous-summaries');
+            }}>
               <div className="nav-icon">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M14 2H6C4.89543 2 4 2.89543 4 4V20C4 21.1046 4.89543 22 6 22H14M20 12H10M20 12L16 8M20 12L16 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
               <span>Previous Summaries</span>
-            </div>
+             </div>
             
             <div className="nav-item" onClick={isAuthenticated ? () => alert('Leaderboards feature coming soon!') : handleLoginRequired}>
               <div className="nav-icon">

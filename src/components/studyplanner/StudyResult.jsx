@@ -19,6 +19,8 @@ const StudyResult = () => {
   const [dayNotes, setDayNotes] = useState({});
   const [currentNote, setCurrentNote] = useState('');
   const [selectedDay, setSelectedDay] = useState(null);
+  const [isSaved, setIsSaved] = useState(false);
+  const [savedPlanId, setSavedPlanId] = useState(null);
   const [motivationalQuotes] = useState([
     "🌟 Every expert was once a beginner!",
     "🚀 Progress, not perfection!",
@@ -41,7 +43,10 @@ const StudyResult = () => {
       const options = { month: 'long', day: 'numeric', year: 'numeric' };
       setEstimatedCompletion(endDate.toLocaleDateString('en-US', options));
     }
-  }, [calendar]);
+
+    // Check if this plan is already saved and load its data
+    checkExistingPlan();
+  }, [calendar, topic, difficulty]);
 
   useEffect(() => {
     const quoteInterval = setInterval(() => {
@@ -49,6 +54,53 @@ const StudyResult = () => {
     }, 4000);
     return () => clearInterval(quoteInterval);
   }, [motivationalQuotes.length]);
+
+  // Auto-save progress changes
+  useEffect(() => {
+    if (isSaved && savedPlanId) {
+      updateSavedPlan();
+    }
+  }, [currentProgress, completedDays, dayNotes, studyStreak]);
+
+  const checkExistingPlan = () => {
+    const user = localStorage.getItem('user');
+    if (!user) return;
+
+    const savedPlans = JSON.parse(localStorage.getItem('studyPlans') || '[]');
+    const existingPlan = savedPlans.find(plan => 
+      plan.topic === topic && 
+      plan.difficulty === difficulty &&
+      plan.calendar?.totalDays === calendar?.totalDays &&
+      plan.calendar?.dailyHours === calendar?.dailyHours
+    );
+
+    if (existingPlan) {
+      setIsSaved(true);
+      setSavedPlanId(existingPlan.id);
+      setCurrentProgress(existingPlan.progress.completed);
+      setCompletedDays(new Set(existingPlan.completedDays || []));
+      setDayNotes(existingPlan.dayNotes || {});
+      setStudyStreak(existingPlan.studyStreak || 0);
+    }
+  };
+
+  const updateSavedPlan = () => {
+    const savedPlans = JSON.parse(localStorage.getItem('studyPlans') || '[]');
+    const planIndex = savedPlans.findIndex(plan => plan.id === savedPlanId);
+    
+    if (planIndex !== -1) {
+      savedPlans[planIndex] = {
+        ...savedPlans[planIndex],
+        progress: { completed: currentProgress, total: calendar?.totalDays || 0 },
+        completedDays: Array.from(completedDays),
+        dayNotes,
+        studyStreak,
+        lastUpdated: new Date().toISOString()
+      };
+      
+      localStorage.setItem('studyPlans', JSON.stringify(savedPlans));
+    }
+  };
 
   const toggleDayCompletion = (dayIndex) => {
     const newCompletedDays = new Set(completedDays);
@@ -134,12 +186,19 @@ const StudyResult = () => {
   };
 
   const handleSave = () => {
-    
-    const user = JSON.parse(localStorage.getItem('user')); // Adjust key if needed
+    const user = localStorage.getItem('user');
 
-    if (!user || !user.email) {
+    if (!user) {
       alert('Please sign in to save your study plan.');
-      navigate('/login'); // Redirects to login
+      navigate('/'); // Redirects to home to sign in
+      return;
+    }
+
+    if (isSaved) {
+      // Plan is already saved, just update progress
+      updateSavedPlan();
+      setShowCelebration(true);
+      setTimeout(() => setShowCelebration(false), 2000);
       return;
     }
 
@@ -153,15 +212,29 @@ const StudyResult = () => {
       completedDays: Array.from(completedDays),
       dayNotes,
       createdAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(),
       studyStreak,
       totalStudyTime
     };
 
-    // Mock save to in-memory storage for demo
-    console.log('Study plan saved:', studyPlanData);
+    const savedPlans = JSON.parse(localStorage.getItem('studyPlans') || '[]');
+    savedPlans.push(studyPlanData);
+    localStorage.setItem('studyPlans', JSON.stringify(savedPlans));
     
+    setIsSaved(true);
+    setSavedPlanId(studyPlanData.id);
+    
+    // Show success message
     setShowCelebration(true);
-    setTimeout(() => setShowCelebration(false), 2000);
+    setTimeout(() => {
+      setShowCelebration(false);
+      // Show navigation hint
+      setTimeout(() => {
+        if (window.confirm('Study plan saved successfully! Would you like to view all your saved plans?')) {
+          navigate('/my-study-plans');
+        }
+      }, 500);
+    }, 2000);
   };
 
   const resetProgress = () => {
@@ -206,6 +279,7 @@ const StudyResult = () => {
             <span className="title-emoji">📖</span>
             Your Study Journey: "{topic}"
             <span className="difficulty-badge">{difficulty}</span>
+            {isSaved && <span className="saved-indicator">💾 Saved</span>}
           </h1>
         </div>
       </header>
@@ -368,8 +442,8 @@ const StudyResult = () => {
         <div className="action-section">
           <div className="button-group horizontal">
             <button className="action-btn primary" onClick={handleSave}>
-              <span className="btn-icon">💾</span>
-              Save Progress
+              <span className="btn-icon">{isSaved ? '🔄' : '💾'}</span>
+              {isSaved ? 'Update Progress' : 'Save Plan'}
             </button>
             <button className="action-btn secondary" onClick={shareStudyPlan}>
               <span className="btn-icon">📤</span>
@@ -386,13 +460,32 @@ const StudyResult = () => {
           </div>
         </div>
 
+        {/* Navigation Hint */}
+        {isSaved && (
+          <div className="navigation-hint">
+            <div className="hint-card">
+              <div className="hint-icon">💡</div>
+              <div className="hint-content">
+                <p>Your progress is automatically saved! Find all your study plans in 
+                  <button 
+                    className="hint-link" 
+                    onClick={() => navigate('/my-study-plans')}
+                  >
+                    My Study Plans
+                  </button>
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Celebration Modal */}
         {showCelebration && (
           <div className="celebration-modal">
             <div className="celebration-content">
               <div className="celebration-animation">🎉</div>
-              <h3>Amazing Progress!</h3>
-              <p>You're doing great! Keep up the excellent work!</p>
+              <h3>{isSaved ? 'Progress Updated!' : 'Plan Saved Successfully!'}</h3>
+              <p>{isSaved ? 'Your progress has been automatically saved!' : 'You can find your study plan in "My Study Plans" section!'}</p>
             </div>
           </div>
         )}
