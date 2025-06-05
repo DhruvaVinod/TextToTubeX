@@ -14,6 +14,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
   const [summaryData, setSummaryData] = useState(null);
   const [videos, setVideos] = useState([]);
   const [error, setError] = useState(null);
+  const [copyrightError, setCopyrightError] = useState(null); // New state for copyright errors
 
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -44,7 +45,6 @@ const SearchResults = ({ searchQuery, onBack }) => {
     "Fun fact: The human attention span averages 8 seconds, but videos can hold it longer!",
     "Amazing! Visual learners make up about 65% of the population."
   ];
-
 
   // Function to search YouTube videos
   const searchYouTubeVideos = async (query) => {
@@ -82,6 +82,14 @@ const SearchResults = ({ searchQuery, onBack }) => {
           language: language
         }),
       });
+
+      // Handle copyright error specifically
+      if (response.status === 403) {
+        const errorData = await response.json();
+        if (errorData.copyright_restricted) {
+          throw new Error(`COPYRIGHT_ERROR:${errorData.error}`);
+        }
+      }
 
       if (!response.ok) {
         throw new Error('Failed to generate summary');
@@ -190,7 +198,18 @@ const SearchResults = ({ searchQuery, onBack }) => {
           setShowSummary(true);
         } catch (error) {
           console.error('Error processing summary:', error);
-          setError('Failed to generate summary. Please try again.');
+          
+          // Check if it's a copyright error
+          if (error.message.startsWith('COPYRIGHT_ERROR:')) {
+            const copyrightMessage = error.message.replace('COPYRIGHT_ERROR:', '');
+            setCopyrightError({
+              message: copyrightMessage,
+              video: selectedVideo
+            });
+          } else {
+            setError('Failed to generate summary. Please try again.');
+          }
+          
           setIsGeneratingSummary(false);
         }
       };
@@ -226,6 +245,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
     setSelectedVideo(null);
     setSelectedLanguage(null);
     setSummaryData(null);
+    setCopyrightError(null); // Clear copyright error
   };
 
   const handleChangeVideo = () => {
@@ -235,6 +255,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
     setSelectedVideo(null);
     setSelectedLanguage(null);
     setSummaryData(null);
+    setCopyrightError(null); // Clear copyright error
   };
 
   const handleReadyForQuiz = () => {
@@ -247,46 +268,45 @@ const SearchResults = ({ searchQuery, onBack }) => {
   };
 
   const handleSaveSummary = async () => {
-  const user = localStorage.getItem('user');
-  if (!user || !summaryData || !selectedVideo) {
-    alert('Please make sure you are logged in and have a summary to save.');
-    return;
-  }
+    const user = localStorage.getItem('user');
+    if (!user || !summaryData || !selectedVideo) {
+      alert('Please make sure you are logged in and have a summary to save.');
+      return;
+    }
 
-  try {
-    setIsSaving(true);
-    
-    const summaryToSave = {
-      id: Date.now(), // Add unique ID
-      userId: user, // Use the user from localStorage
-      videoId: selectedVideo.id,
-      videoTitle: selectedVideo.title,
-      videoChannel: selectedVideo.channel,
-      videoDuration: selectedVideo.duration,
-      videoThumbnail: selectedVideo.thumbnail,
-      videoUrl: selectedVideo.videoUrl,
-      language: selectedLanguage,
-      languageName: Object.keys(languages).find(key => languages[key] === selectedLanguage),
-      content: summaryData.summary,
-      keyPoints: summaryData.key_points || [],
-      createdAt: new Date().toISOString(),
-      searchQuery: searchQuery // Add original search query
-    };
+    try {
+      setIsSaving(true);
+      
+      const summaryToSave = {
+        id: Date.now(), // Add unique ID
+        userId: user, // Use the user from localStorage
+        videoId: selectedVideo.id,
+        videoTitle: selectedVideo.title,
+        videoChannel: selectedVideo.channel,
+        videoDuration: selectedVideo.duration,
+        videoThumbnail: selectedVideo.thumbnail,
+        videoUrl: selectedVideo.videoUrl,
+        language: selectedLanguage,
+        languageName: Object.keys(languages).find(key => languages[key] === selectedLanguage),
+        content: summaryData.summary,
+        keyPoints: summaryData.key_points || [],
+        createdAt: new Date().toISOString(),
+        searchQuery: searchQuery // Add original search query
+      };
 
-    const savedSummaries = JSON.parse(localStorage.getItem('savedSummaries') || '[]');
-    savedSummaries.push(summaryToSave);
-    localStorage.setItem('savedSummaries', JSON.stringify(savedSummaries));
+      const savedSummaries = JSON.parse(localStorage.getItem('savedSummaries') || '[]');
+      savedSummaries.push(summaryToSave);
+      localStorage.setItem('savedSummaries', JSON.stringify(savedSummaries));
 
-    setIsSaved(true);
-    alert('Summary saved successfully!');
-  } catch (error) {
-    console.error('Error saving summary:', error);
-    alert('Failed to save summary. Please try again.');
-  } finally {
-    setIsSaving(false);
-  }
-};
- 
+      setIsSaved(true);
+      alert('Summary saved successfully!');
+    } catch (error) {
+      console.error('Error saving summary:', error);
+      alert('Failed to save summary. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleDownloadSummary = () => {
     if (summaryData && summaryData.summary) {
@@ -299,6 +319,85 @@ const SearchResults = ({ searchQuery, onBack }) => {
       document.body.removeChild(element);
     }
   };
+
+  // Handle back from copyright error
+  const handleBackFromCopyright = () => {
+    setCopyrightError(null);
+    setShowSummarySelection(true);
+  };
+
+  // Copyright Error UI
+  if (copyrightError) {
+    return (
+      <div className="search-results">
+        <div className="loading-container">
+          <div className="loading-header">
+            <button className="back-btn" onClick={handleBackFromCopyright}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19 12H5M12 19L5 12L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            <h2>Copyright Protected Content</h2>
+          </div>
+          
+          <div className="loading-content">
+            <div className="copyright-error-container">
+              <div className="copyright-icon">🔒</div>
+              <div className="copyright-video-info">
+                <img 
+                  src={copyrightError.video.thumbnail} 
+                  alt={copyrightError.video.title}
+                  className="copyright-thumbnail"
+                />
+                <div className="copyright-video-details">
+                  <h3>{copyrightError.video.title}</h3>
+                  <p>{copyrightError.video.channel}</p>
+                </div>
+              </div>
+              
+              <div className="copyright-message">
+                <h4>Cannot Process This Video</h4>
+                <p>{copyrightError.message}</p>
+              </div>
+              
+              <div className="copyright-suggestions">
+                <div className="suggestion">
+                  <div className="suggestion-icon">🎓</div>
+                  <div className="suggestion-text">
+                    <strong>Try Educational Content</strong>
+                    <p>Look for lectures, tutorials, or educational channels</p>
+                  </div>
+                </div>
+                <div className="suggestion">
+                  <div className="suggestion-icon">👤</div>
+                  <div className="suggestion-text">
+                    <strong>Independent Creators</strong>
+                    <p>Choose videos from individual content creators</p>
+                  </div>
+                </div>
+                <div className="suggestion">
+                  <div className="suggestion-icon">🆓</div>
+                  <div className="suggestion-text">
+                    <strong>Open Source Content</strong>
+                    <p>Look for Creative Commons or openly licensed videos</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="copyright-actions">
+                <button className="change-video-btn" onClick={handleBackFromCopyright}>
+                  Choose Different Video
+                </button>
+                <button className="watch-original-btn" onClick={() => window.open(copyrightError.video.videoUrl, '_blank')}>
+                  Watch on YouTube
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return (
@@ -542,14 +641,14 @@ const SearchResults = ({ searchQuery, onBack }) => {
               <button className="change-video-btn" onClick={handleChangeVideo}>
                 Change Video
               </button>
-            <button 
-            className={`save-btn ${isSaved ? 'saved' : ''}`}
-            onClick={handleSaveSummary}
-            disabled={isSaving || isSaved}
-            >
-              {isSaving ? 'Saving...' : isSaved ? 'Saved ✓' : 'Save Summary'}
-            </button>
-          </div>
+              <button 
+                className={`save-btn ${isSaved ? 'saved' : ''}`}
+                onClick={handleSaveSummary}
+                disabled={isSaving || isSaved}
+              >
+                {isSaving ? 'Saving...' : isSaved ? 'Saved ✓' : 'Save Summary'}
+              </button>
+            </div>
           </div>
         </div>
       </div>

@@ -21,6 +21,7 @@ import easyocr
 import base64
 from PIL import Image
 import io
+import yt_dlp
 
 
 from dotenv import load_dotenv
@@ -51,7 +52,66 @@ if GEMINI_API_KEY:
 class VideoProcessor:
     def __init__(self):
         self.temp_dir = tempfile.mkdtemp()
-        
+    def check_video_copyright(self, video_id: str) -> Dict:
+        """Check if video has copyright restrictions"""
+        try:
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
+            ydl_opts = {
+                'quiet': True,
+                'no_warnings': True,
+                'extract_flat': False,
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(video_url, download=False)
+                
+                # Check various copyright indicators
+                title = info.get('title', '').lower()
+                description = info.get('description', '').lower()
+                uploader = info.get('uploader', '').lower()
+                
+                # Music industry indicators
+                music_keywords = [
+                    'official music video', 'vevo', 'records', 'entertainment',
+                    'sony music', 'universal music', 'warner music', 'emi music'
+                ]
+                
+                # Movie/TV indicators
+                media_keywords = [
+                    'official trailer', 'full movie', 'netflix', 'disney',
+                    'paramount', 'warner bros', 'sony pictures'
+                ]
+                
+                # Check for restricted content
+                for keyword in music_keywords + media_keywords:
+                    if keyword in title or keyword in description or keyword in uploader:
+                        return {
+                            "restricted": True,
+                            "reason": "This appears to be copyrighted content (music/entertainment industry)"
+                        }
+                
+                # Check duration - very long videos might be full movies/shows
+                duration = info.get('duration', 0)
+                if duration > 7200:  # 2+ hours
+                    return {
+                        "restricted": True,
+                        "reason": "Video is too long (likely full movie/show content)"
+                    }
+                
+                # Check if video is available
+                if info.get('is_live') or not info.get('formats'):
+                    return {
+                        "restricted": True,
+                        "reason": "Video is not available for processing"
+                    }
+                
+                return {"restricted": False, "reason": None}
+                
+        except Exception as e:
+            return {
+                "restricted": True,
+                "reason": f"Unable to verify copyright status: {str(e)}"
+            }  
     def download_video_audio(self, video_id: str) -> str:
         """
         Download audio from YouTube video using yt-dlp
@@ -435,10 +495,20 @@ def generate_summary():
         logger.info(f"Generating summary for video: {video_id} in language: {target_language}")
         
         # Initialize video processor
+        # Initialize video processor
         if video_processor is None:
             video_processor = VideoProcessor()
-        
-        # Step 1: Download video audio
+
+        # Step 1: Check for copyright restrictions
+        logger.info("Checking video copyright status...")
+        copyright_check = video_processor.check_video_copyright(video_id)
+        if copyright_check["restricted"]:
+            return jsonify({
+                'error': f"❌ Cannot process this video: {copyright_check['reason']}",
+                'copyright_restricted': True
+            }), 403
+
+        # Step 2: Download video audio
         logger.info("Downloading video audio...")
         audio_file = video_processor.download_video_audio(video_id)
         
