@@ -410,8 +410,8 @@ const Homepage = () => {
               </div>
               <div className="feature-card">
                 <div className="feature-icon">🎥</div>
-                <h3>Video Summaries</h3>
-                <p>Find relevant YouTube videos for your content and generate summaries</p>
+                <h3>Video Generation</h3>
+                <p>Create fun videos to gain better understanding!</p>
               </div>
               <div className="feature-card">
                 <div className="feature-icon">🧠</div>
