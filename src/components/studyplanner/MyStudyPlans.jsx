@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import './StudyPlans.css'; // Import the CSS file
 
 const MyStudyPlans = () => {
   const navigate = useNavigate();
@@ -53,24 +54,11 @@ const MyStudyPlans = () => {
   const showCompletionCelebration = (topic) => {
     // Create a temporary celebration element
     const celebration = document.createElement('div');
-    celebration.style.cssText = `
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 2rem;
-      border-radius: 1rem;
-      text-align: center;
-      z-index: 1000;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-      animation: celebration 0.5s ease-out;
-    `;
+    celebration.className = 'celebration-popup';
     celebration.innerHTML = `
-      <div style="font-size: 3rem; margin-bottom: 1rem;">🎉</div>
-      <h3 style="margin: 0 0 0.5rem 0; font-size: 1.5rem;">Congratulations!</h3>
-      <p style="margin: 0; opacity: 0.9;">You completed "${topic}"!</p>
+      <div class="celebration-icon">🎉</div>
+      <h3 class="celebration-title">Congratulations!</h3>
+      <p class="celebration-text">You completed "${topic}"!</p>
     `;
     
     document.body.appendChild(celebration);
@@ -147,80 +135,33 @@ const MyStudyPlans = () => {
   };
 
   const getProgressColor = (percentage) => {
-    if (percentage === 100) return '#10b981'; // green
-    if (percentage >= 75) return '#3b82f6'; // blue
+    if (percentage === 100) return '#39ff14'; // green
+    if (percentage >= 75) return '#00d4ff'; // blue
     if (percentage >= 50) return '#f59e0b'; // yellow
     if (percentage >= 25) return '#f97316'; // orange
-    return '#ef4444'; // red
+    return '#ff4757'; // red
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '2rem 1rem'
-    }}>
+    <div className="my-study-plans">
       {/* Header */}
-      <header style={{
-        maxWidth: '1200px',
-        margin: '0 auto 2rem auto',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '1rem',
-        flexWrap: 'wrap'
-      }}>
+      <header className="study-plans-header">
         <button 
           onClick={() => navigate(-1)}
-          style={{
-            background: 'rgba(255,255,255,0.2)',
-            border: 'none',
-            color: 'white',
-            padding: '0.75rem 1.5rem',
-            borderRadius: '0.5rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            fontSize: '1rem',
-            transition: 'all 0.2s ease'
-          }}
-          onMouseOver={(e) => e.target.style.background = 'rgba(255,255,255,0.3)'}
-          onMouseOut={(e) => e.target.style.background = 'rgba(255,255,255,0.2)'}
+          className="back-btn"
         >
           ← Back
         </button>
-        <h1 style={{
-          color: 'white',
-          fontSize: '2.5rem',
-          fontWeight: 'bold',
-          margin: 0,
-          textShadow: '0 2px 4px rgba(0,0,0,0.3)'
-        }}>
+        <h1 className="study-plans-title">
           📘 My Study Plans
         </h1>
       </header>
 
-      <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+      <div className="study-plans-container">
         {/* Filter Controls */}
-        <div style={{
-          background: 'rgba(255,255,255,0.95)',
-          borderRadius: '1rem',
-          padding: '1.5rem',
-          marginBottom: '2rem',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '1rem'
-          }}>
-            <div style={{
-              display: 'flex',
-              gap: '0.5rem',
-              flexWrap: 'wrap'
-            }}>
+        <div className="filter-controls">
+          <div className="filter-content">
+            <div className="filter-buttons">
               {[
                 { key: 'all', label: 'All Plans', icon: '📚' },
                 { key: 'in-progress', label: 'In Progress', icon: '🔄' },
@@ -229,26 +170,13 @@ const MyStudyPlans = () => {
                 <button
                   key={key}
                   onClick={() => setFilter(key)}
-                  style={{
-                    background: filter === key ? '#667eea' : 'transparent',
-                    color: filter === key ? 'white' : '#667eea',
-                    border: `2px solid ${filter === key ? '#667eea' : '#e5e7eb'}`,
-                    padding: '0.5rem 1rem',
-                    borderRadius: '0.5rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.25rem',
-                    fontSize: '0.9rem',
-                    fontWeight: '500',
-                    transition: 'all 0.2s ease'
-                  }}
+                  className={`filter-btn ${filter === key ? 'active' : ''}`}
                 >
                   {icon} {label}
                 </button>
               ))}
             </div>
-            <div style={{ color: '#6b7280', fontSize: '0.9rem' }}>
+            <div className="filter-count">
               {filteredPlans.length} plan{filteredPlans.length !== 1 ? 's' : ''}
             </div>
           </div>
@@ -256,46 +184,27 @@ const MyStudyPlans = () => {
 
         {/* Plans List */}
         {filteredPlans.length === 0 ? (
-          <div style={{
-            background: 'rgba(255,255,255,0.95)',
-            borderRadius: '1rem',
-            padding: '3rem',
-            textAlign: 'center',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.1)'
-          }}>
-            <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>📚</div>
-            <h3 style={{ color: '#374151', marginBottom: '0.5rem' }}>
+          <div className="empty-state">
+            <div className="empty-icon">📚</div>
+            <h3 className="empty-title">
               {filter === 'all' ? 'No study plans yet' : 
                filter === 'completed' ? 'No completed plans yet' : 
                'No plans in progress'}
             </h3>
-            <p style={{ color: '#6b7280', marginBottom: '2rem' }}>
+            <p className="empty-description">
               {filter === 'all' ? 'Create your first study plan to get started!' :
                filter === 'completed' ? 'Complete some plans to see them here!' :
                'Start working on your plans to see them here!'}
             </p>
             <button
               onClick={() => navigate('/')}
-              style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                padding: '1rem 2rem',
-                borderRadius: '0.5rem',
-                cursor: 'pointer',
-                fontSize: '1rem',
-                fontWeight: '600'
-              }}
+              className="create-plan-btn"
             >
               Create New Plan
             </button>
           </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gap: '1.5rem',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))'
-          }}>
+          <div className="plans-grid">
             {filteredPlans.map((plan, index) => {
               const progressPercentage = (plan.progress.completed / plan.progress.total) * 100;
               const isCompleted = plan.progress.completed === plan.progress.total;
@@ -303,64 +212,25 @@ const MyStudyPlans = () => {
               return (
                 <div
                   key={plan.id || index}
-                  style={{
-                    background: 'rgba(255,255,255,0.95)',
-                    borderRadius: '1rem',
-                    padding: '1.5rem',
-                    boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
-                    border: isCompleted ? '2px solid #10b981' : '2px solid transparent',
-                    transition: 'all 0.2s ease',
-                    position: 'relative'
-                  }}
+                  className={`plan-card ${isCompleted ? 'completed' : ''}`}
                 >
                   {/* Completion Badge */}
                   {isCompleted && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '-0.5rem',
-                      right: '1rem',
-                      background: '#10b981',
-                      color: 'white',
-                      padding: '0.25rem 0.75rem',
-                      borderRadius: '1rem',
-                      fontSize: '0.8rem',
-                      fontWeight: '600'
-                    }}>
+                    <div className="completion-badge">
                       ✅ Completed
                     </div>
                   )}
 
                   {/* Plan Header */}
-                  <div style={{ marginBottom: '1rem' }}>
-                    <h2 style={{
-                      color: '#1f2937',
-                      fontSize: '1.25rem',
-                      fontWeight: 'bold',
-                      margin: '0 0 0.5rem 0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem'
-                    }}>
+                  <div className="plan-header">
+                    <h2 className="plan-title">
                       📚 {plan.topic}
-                      <span style={{
-                        background: '#e5e7eb',
-                        color: '#374151',
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '0.25rem',
-                        fontSize: '0.75rem',
-                        fontWeight: 'normal'
-                      }}>
+                      <span className="difficulty-badge">
                         {plan.difficulty}
                       </span>
                     </h2>
                     
-                    <div style={{
-                      display: 'flex',
-                      gap: '1rem',
-                      fontSize: '0.8rem',
-                      color: '#6b7280',
-                      flexWrap: 'wrap'
-                    }}>
+                    <div className="plan-meta">
                       <span>📅 {plan.calendar?.totalDays || 0} days</span>
                       <span>⏰ {plan.calendar?.dailyHours || 0}h/day</span>
                       <span>🔄 Updated: {formatDate(plan.lastUpdated || plan.createdAt)}</span>
@@ -368,65 +238,32 @@ const MyStudyPlans = () => {
                   </div>
 
                   {/* Progress Section */}
-                  <div style={{ marginBottom: '1.5rem' }}>
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: '0.5rem'
-                    }}>
-                      <span style={{ fontSize: '0.9rem', color: '#374151' }}>
+                  <div className="progress-section">
+                    <div className="progress-header">
+                      <span className="progress-text">
                         Progress: {plan.progress.completed}/{plan.progress.total}
                       </span>
-                      <span style={{
-                        fontSize: '0.9rem',
-                        fontWeight: '600',
-                        color: getProgressColor(progressPercentage)
-                      }}>
+                      <span 
+                        className="progress-percentage"
+                        style={{ color: getProgressColor(progressPercentage) }}
+                      >
                         {progressPercentage.toFixed(1)}%
                       </span>
                     </div>
                     
-                    <div style={{
-                      width: '100%',
-                      height: '0.5rem',
-                      background: '#e5e7eb',
-                      borderRadius: '0.25rem',
-                      overflow: 'hidden'
-                    }}>
-                      <div style={{
-                        width: `${progressPercentage}%`,
-                        height: '100%',
-                        background: `linear-gradient(90deg, ${getProgressColor(progressPercentage)}, ${getProgressColor(progressPercentage)}dd)`,
-                        borderRadius: '0.25rem',
-                        transition: 'width 0.3s ease'
-                      }} />
+                    <div className="progress-bar">
+                      <div 
+                        className={`progress-fill ${isCompleted ? 'completed' : ''}`}
+                        style={{ width: `${progressPercentage}%` }}
+                      />
                     </div>
 
                     {/* Progress Controls */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'center',
-                      gap: '0.5rem',
-                      marginTop: '1rem'
-                    }}>
+                    <div className="progress-controls">
                       <button
                         onClick={() => updateProgress(plans.indexOf(plan), -1)}
                         disabled={plan.progress.completed <= 0}
-                        style={{
-                          background: plan.progress.completed <= 0 ? '#e5e7eb' : '#ef4444',
-                          color: plan.progress.completed <= 0 ? '#9ca3af' : 'white',
-                          border: 'none',
-                          width: '2.5rem',
-                          height: '2.5rem',
-                          borderRadius: '50%',
-                          cursor: plan.progress.completed <= 0 ? 'not-allowed' : 'pointer',
-                          fontSize: '1.2rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'all 0.2s ease'
-                        }}
+                        className="progress-btn decrease"
                         title="Decrease progress"
                       >
                         −
@@ -434,20 +271,7 @@ const MyStudyPlans = () => {
                       <button
                         onClick={() => updateProgress(plans.indexOf(plan), 1)}
                         disabled={plan.progress.completed >= plan.progress.total}
-                        style={{
-                          background: plan.progress.completed >= plan.progress.total ? '#e5e7eb' : '#10b981',
-                          color: plan.progress.completed >= plan.progress.total ? '#9ca3af' : 'white',
-                          border: 'none',
-                          width: '2.5rem',
-                          height: '2.5rem',
-                          borderRadius: '50%',
-                          cursor: plan.progress.completed >= plan.progress.total ? 'not-allowed' : 'pointer',
-                          fontSize: '1.2rem',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'all 0.2s ease'
-                        }}
+                        className="progress-btn increase"
                         title="Increase progress"
                       >
                         +
@@ -456,63 +280,23 @@ const MyStudyPlans = () => {
                   </div>
 
                   {/* Action Buttons */}
-                  <div style={{
-                    display: 'flex',
-                    gap: '0.5rem',
-                    flexWrap: 'wrap'
-                  }}>
+                  <div className="action-buttons">
                     <button
                       onClick={() => viewPlanDetails(plan)}
-                      style={{
-                        flex: '1',
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        color: 'white',
-                        border: 'none',
-                        padding: '0.75rem 1rem',
-                        borderRadius: '0.5rem',
-                        cursor: 'pointer',
-                        fontSize: '0.9rem',
-                        fontWeight: '500',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.25rem'
-                      }}
+                      className="action-btn primary"
                     >
                       👁️ View Details
                     </button>
                     <button
                       onClick={() => resetPlanProgress(plans.indexOf(plan))}
-                      style={{
-                        background: '#f59e0b',
-                        color: 'white',
-                        border: 'none',
-                        padding: '0.75rem',
-                        borderRadius: '0.5rem',
-                        cursor: 'pointer',
-                        fontSize: '0.9rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
+                      className="action-btn reset"
                       title="Reset progress"
                     >
                       🔄
                     </button>
                     <button
                       onClick={() => confirmDelete(plans.indexOf(plan))}
-                      style={{
-                        background: '#ef4444',
-                        color: 'white',
-                        border: 'none',
-                        padding: '0.75rem',
-                        borderRadius: '0.5rem',
-                        cursor: 'pointer',
-                        fontSize: '0.9rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
+                      className="action-btn delete"
                       title="Delete plan"
                     >
                       🗑️
@@ -520,28 +304,12 @@ const MyStudyPlans = () => {
                   </div>
 
                   {/* Study Plan Preview */}
-                  <details style={{ marginTop: '1rem' }}>
-                    <summary style={{
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                      fontWeight: '600',
-                      color: '#374151',
-                      padding: '0.5rem 0'
-                    }}>
+                  <details className="plan-preview">
+                    <summary>
                       📖 View Study Plan
                     </summary>
                     <div
-                      style={{
-                        marginTop: '0.5rem',
-                        padding: '1rem',
-                        background: '#f9fafb',
-                        borderRadius: '0.5rem',
-                        fontSize: '0.85rem',
-                        color: '#374151',
-                        maxHeight: '200px',
-                        overflow: 'auto',
-                        border: '1px solid #e5e7eb'
-                      }}
+                      className="plan-content"
                       dangerouslySetInnerHTML={{ __html: plan.plan }}
                     />
                   </details>
@@ -553,80 +321,28 @@ const MyStudyPlans = () => {
 
         {/* Delete Confirmation Modal */}
         {showDeleteModal && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '1rem'
-          }}>
-            <div style={{
-              background: 'white',
-              borderRadius: '1rem',
-              padding: '2rem',
-              maxWidth: '400px',
-              width: '100%',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
-            }}>
-              <div style={{
-                textAlign: 'center',
-                marginBottom: '2rem'
-              }}>
-                <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚠️</div>
-                <h3 style={{
-                  color: '#374151',
-                  marginBottom: '0.5rem',
-                  fontSize: '1.25rem'
-                }}>
+          <div className="modal-overlay">
+            <div className="modal-content">
+              <div className="modal-header">
+                <div className="modal-icon">⚠️</div>
+                <h3 className="modal-title">
                   Delete Study Plan?
                 </h3>
-                <p style={{
-                  color: '#6b7280',
-                  margin: 0,
-                  fontSize: '0.9rem'
-                }}>
+                <p className="modal-description">
                   This action cannot be undone. All progress and notes will be lost.
                 </p>
               </div>
               
-              <div style={{
-                display: 'flex',
-                gap: '1rem',
-                justifyContent: 'center'
-              }}>
+              <div className="modal-actions">
                 <button
                   onClick={cancelDelete}
-                  style={{
-                    background: '#e5e7eb',
-                    color: '#374151',
-                    border: 'none',
-                    padding: '0.75rem 1.5rem',
-                    borderRadius: '0.5rem',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem',
-                    fontWeight: '500'
-                  }}
+                  className="modal-btn cancel"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={deletePlan}
-                  style={{
-                    background: '#ef4444',
-                    color: 'white',
-                    border: 'none',
-                    padding: '0.75rem 1.5rem',
-                    borderRadius: '0.5rem',
-                    cursor: 'pointer',
-                    fontSize: '0.9rem',
-                    fontWeight: '500'
-                  }}
+                  className="modal-btn confirm"
                 >
                   Delete Plan
                 </button>
@@ -635,20 +351,6 @@ const MyStudyPlans = () => {
           </div>
         )}
       </div>
-
-      {/* Add celebration animation styles */}
-      <style>{`
-        @keyframes celebration {
-          0% {
-            transform: translate(-50%, -50%) scale(0.8);
-            opacity: 0;
-          }
-          100% {
-            transform: translate(-50%, -50%) scale(1);
-            opacity: 1;
-          }
-        }
-      `}</style>
     </div>
   );
 };
