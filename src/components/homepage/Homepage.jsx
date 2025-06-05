@@ -344,7 +344,7 @@ const Homepage = () => {
               // Show login buttons when not logged in
               <>
                 <button className="auth-btn signin" onClick={handleSignIn}>Sign In</button>
-                <button className="auth-btn signup" onClick={handleSignUp}>Sign Up</button>
+                {/* <button className="auth-btn signup" onClick={handleSignUp}>Sign Up</button> */}
               </>
             )}
           </div>
