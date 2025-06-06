@@ -22,6 +22,14 @@ import base64
 from PIL import Image
 import io
 import yt_dlp
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import ssl
+import urllib3
+from urllib3.poolmanager import PoolManager
+from urllib3.util import connection
+import socket
 
 
 from dotenv import load_dotenv
@@ -38,8 +46,9 @@ logger = logging.getLogger(__name__)
 model = SentenceTransformer('all-MiniLM-L6-v2')
 
 # API Keys configuration
-YOUTUBE_API_KEY = 'AIzaSyD6hKgUxy-91DW8AnaTrc7nvDHUfWazi_0'
-GEMINI_API_KEY = "AIzaSyDDwEucj4KNsnUT4m4qpt1pwnByhm6_vjM"  # Add your Gemini API key to .env file
+YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") 
+GEMINI_FLASH_KEY=os.getenv('GEMINI_FLASH_KEY')
 
 # YouTube API URLs
 YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
@@ -255,71 +264,266 @@ class VideoProcessor:
         except Exception as e:
             logger.error(f"Error cleaning up temp files: {e}")
 
+class SSLAdapter(HTTPAdapter):
+    """Custom SSL adapter to handle SSL connection issues"""
+    
+    def __init__(self, ssl_context=None, **kwargs):
+        self.ssl_context = ssl_context
+        super().__init__(**kwargs)
+    
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs['ssl_context'] = self.ssl_context
+        return super().init_poolmanager(*args, **kwargs)
 class YouTubeSearcher:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.model = model
+        self.session = self._create_secure_session()
+    
+    def _create_secure_session(self):
+        """Create a requests session with SSL handling and retry logic"""
+        session = requests.Session()
+        
+        # Create SSL context with more permissive settings
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+        
+        # Alternative: Use a more compatible SSL context
+        # ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        # ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2
+        
+        # Configure retry strategy
+        retry_strategy = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "OPTIONS"]
+        )
+        
+        # Mount adapter with SSL context
+        adapter = SSLAdapter(ssl_context=ssl_context, max_retries=retry_strategy)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        
+        # Set headers
+        session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'application/json',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
+        })
+        
+        return session
     
     def search_videos(self, query: str, max_results: int = 20) -> List[Dict]:
         """
         Search for videos on YouTube and return detailed information
         """
         try:
-            # Step 1: Search for videos
-            search_params = {
-                'part': 'snippet',
-                'q': query,
-                'type': 'video',
-                'maxResults': max_results,
-                'key': self.api_key,
-                'order': 'relevance',
-                'videoDuration': 'medium',  # 4-20 minutes
-                'videoDefinition': 'high',
-                'relevanceLanguage': 'en',
-                'safeSearch': 'strict'
-            }
-            
-            search_response = requests.get(YOUTUBE_SEARCH_URL, params=search_params)
-            search_response.raise_for_status()
-            search_data = search_response.json()
-            
-            if 'items' not in search_data:
-                logger.warning(f"No items found in search response for query: {query}")
-                return []
-            
-            # Extract video IDs
-            video_ids = [item['id']['videoId'] for item in search_data['items']]
-            
-            # Step 2: Get detailed video information
-            videos_params = {
-                'part': 'snippet,statistics,contentDetails',
-                'id': ','.join(video_ids),
-                'key': self.api_key
-            }
-            
-            videos_response = requests.get(YOUTUBE_VIDEOS_URL, params=videos_params)
-            videos_response.raise_for_status()
-            videos_data = videos_response.json()
-            
-            # Step 3: Process and rank videos
-            videos = []
-            for item in videos_data.get('items', []):
-                video_info = self._extract_video_info(item)
-                if video_info:
-                    videos.append(video_info)
-            
-            # Step 4: Calculate semantic similarity and rank
-            ranked_videos = self._rank_videos_by_relevance(query, videos)
-            
-            # Return top 4 most relevant videos
-            return ranked_videos[:4]
-            
-        except requests.RequestException as e:
-            logger.error(f"YouTube API request failed: {e}")
-            raise Exception(f"Failed to search YouTube: {str(e)}")
+            # Method 1: Use the configured session
+            videos = self._search_with_session(query, max_results)
+            if videos:
+                return videos
+                
         except Exception as e:
-            logger.error(f"Error in search_videos: {e}")
-            raise Exception(f"Search failed: {str(e)}")
+            logger.warning(f"Session-based search failed: {e}")
+            
+        try:
+            # Method 2: Try with urllib3 and disabled SSL warnings
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            videos = self._search_with_urllib3(query, max_results)
+            if videos:
+                return videos
+                
+        except Exception as e:
+            logger.warning(f"urllib3-based search failed: {e}")
+            
+        try:
+            # Method 3: Try with basic requests and timeout
+            videos = self._search_basic(query, max_results)
+            return videos
+            
+        except Exception as e:
+            logger.error(f"All search methods failed: {e}")
+            raise Exception(f"Failed to search YouTube after multiple attempts: {str(e)}")
+    
+    def _search_with_session(self, query: str, max_results: int) -> List[Dict]:
+        """Search using configured session"""
+        # Step 1: Search for videos
+        search_params = {
+            'part': 'snippet',
+            'q': query,
+            'type': 'video',
+            'maxResults': max_results,
+            'key': self.api_key,
+            'order': 'relevance',
+            'videoDuration': 'medium',
+            'videoDefinition': 'high',
+            'relevanceLanguage': 'en',
+            'safeSearch': 'strict'
+        }
+        
+        search_response = self.session.get(
+            YOUTUBE_SEARCH_URL, 
+            params=search_params, 
+            timeout=(10, 30),  # Connection timeout, read timeout
+            verify=False  # Disable SSL verification as fallback
+        )
+        search_response.raise_for_status()
+        search_data = search_response.json()
+        
+        if 'items' not in search_data:
+            logger.warning(f"No items found in search response for query: {query}")
+            return []
+        
+        # Extract video IDs
+        video_ids = [item['id']['videoId'] for item in search_data['items']]
+        
+        # Step 2: Get detailed video information
+        videos_params = {
+            'part': 'snippet,statistics,contentDetails',
+            'id': ','.join(video_ids),
+            'key': self.api_key
+        }
+        
+        videos_response = self.session.get(
+            YOUTUBE_VIDEOS_URL, 
+            params=videos_params, 
+            timeout=(10, 30),
+            verify=False
+        )
+        videos_response.raise_for_status()
+        videos_data = videos_response.json()
+        
+        # Process videos
+        return self._process_videos(query, videos_data)
+    
+    def _search_with_urllib3(self, query: str, max_results: int) -> List[Dict]:
+        """Alternative search method using urllib3 directly"""
+        import urllib3
+        
+        # Create pool manager with SSL disabled
+        http = urllib3.PoolManager(
+            cert_reqs='CERT_NONE',
+            ca_certs=None,
+            timeout=urllib3.Timeout(connect=10, read=30)
+        )
+        
+        # Step 1: Search for videos
+        search_params = {
+            'part': 'snippet',
+            'q': query,
+            'type': 'video',
+            'maxResults': max_results,
+            'key': self.api_key,
+            'order': 'relevance',
+            'videoDuration': 'medium',
+            'videoDefinition': 'high',
+            'relevanceLanguage': 'en',
+            'safeSearch': 'strict'
+        }
+        
+        # Build URL
+        import urllib.parse
+        search_url = f"{YOUTUBE_SEARCH_URL}?{urllib.parse.urlencode(search_params)}"
+        
+        response = http.request('GET', search_url)
+        if response.status != 200:
+            raise Exception(f"HTTP {response.status}: {response.data}")
+        
+        import json
+        search_data = json.loads(response.data.decode('utf-8'))
+        
+        if 'items' not in search_data:
+            return []
+        
+        # Get video details (simplified for this method)
+        video_ids = [item['id']['videoId'] for item in search_data['items']]
+        videos_params = {
+            'part': 'snippet,statistics,contentDetails',
+            'id': ','.join(video_ids),
+            'key': self.api_key
+        }
+        
+        videos_url = f"{YOUTUBE_VIDEOS_URL}?{urllib.parse.urlencode(videos_params)}"
+        videos_response = http.request('GET', videos_url)
+        
+        if videos_response.status != 200:
+            raise Exception(f"HTTP {videos_response.status}: {videos_response.data}")
+        
+        videos_data = json.loads(videos_response.data.decode('utf-8'))
+        return self._process_videos(query, videos_data)
+    
+    def _search_basic(self, query: str, max_results: int) -> List[Dict]:
+        """Basic search with minimal SSL configuration"""
+        import requests
+        
+        # Create a new session with minimal configuration
+        session = requests.Session()
+        session.verify = False  # Disable SSL verification
+        
+        # Set a longer timeout
+        timeout = (15, 45)  # connection timeout, read timeout
+        
+        # Step 1: Search for videos
+        search_params = {
+            'part': 'snippet',
+            'q': query,
+            'type': 'video',
+            'maxResults': max_results,
+            'key': self.api_key,
+            'order': 'relevance',
+            'videoDuration': 'medium',
+            'videoDefinition': 'high',
+            'relevanceLanguage': 'en',
+            'safeSearch': 'strict'
+        }
+        
+        search_response = session.get(
+            YOUTUBE_SEARCH_URL, 
+            params=search_params, 
+            timeout=timeout
+        )
+        search_response.raise_for_status()
+        search_data = search_response.json()
+        
+        if 'items' not in search_data:
+            return []
+        
+        # Extract video IDs
+        video_ids = [item['id']['videoId'] for item in search_data['items']]
+        
+        # Step 2: Get detailed video information
+        videos_params = {
+            'part': 'snippet,statistics,contentDetails',
+            'id': ','.join(video_ids),
+            'key': self.api_key
+        }
+        
+        videos_response = session.get(
+            YOUTUBE_VIDEOS_URL, 
+            params=videos_params, 
+            timeout=timeout
+        )
+        videos_response.raise_for_status()
+        videos_data = videos_response.json()
+        
+        return self._process_videos(query, videos_data)
+    
+    def _process_videos(self, query: str, videos_data: Dict) -> List[Dict]:
+        """Process video data and rank by relevance"""
+        videos = []
+        for item in videos_data.get('items', []):
+            video_info = self._extract_video_info(item)
+            if video_info:
+                videos.append(video_info)
+        
+        # Rank videos by relevance
+        ranked_videos = self._rank_videos_by_relevance(query, videos)
+        return ranked_videos[:4]
     
     def _extract_video_info(self, item: Dict) -> Dict:
         """
@@ -701,6 +905,100 @@ def upload_image():
             'error': str(e)
         }), 500
 
+@app.route('/api/analyze-diagram', methods=['POST'])
+def analyze_diagram():
+    """
+    Endpoint to explain a diagram/image using Gemini 1.5 Flash with a separate API key.
+    """
+    try:
+        if 'image' not in request.files:
+            return jsonify({'error': 'No image file uploaded'}), 400
+
+        file = request.files['image']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+
+        if not file.mimetype.startswith('image/'):
+            return jsonify({'error': 'Invalid file type. Please upload an image.'}), 400
+
+        image_data = file.read()
+
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_FLASH_KEY)
+
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
+
+        response = model.generate_content([
+            {"mime_type": file.mimetype, "data": image_data},
+            {"text": "Explain this diagram or image in simple educational terms. Include any labels or parts. Be precise and elaborate"}
+        ])
+
+        return jsonify({
+            "explanation": response.text.strip(),
+            "notes": "Explanation generated using Gemini 1.5 Flash"
+        })
+
+        genai.configure(api_key=GEMINI_API_KEY)
+
+    except Exception as e:
+        logger.error(f"Error analyzing diagram: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/generate-youtube-topic', methods=['POST'])
+def generate_youtube_topic():
+    """
+    Endpoint to generate a 2-5 word YouTube search topic from an explanation using Gemini.
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'explanation' not in data:
+            return jsonify({'error': 'No explanation provided'}), 400
+
+        explanation = data['explanation']
+        
+        if not explanation.strip():
+            return jsonify({'error': 'Empty explanation provided'}), 400
+
+        import google.generativeai as genai
+
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
+
+        prompt = f"""Based on this educational explanation, generate a concise 2-5 word search topic that would be perfect for finding relevant educational YouTube videos about this subject. 
+
+The topic should be:
+- Clear and specific
+- Educational in nature
+- Optimized for YouTube search
+- 2-5 words maximum
+- Focus on the main concept/subject
+
+Only return the topic phrase, nothing else.
+
+Explanation: {explanation}"""
+
+        response = model.generate_content(prompt)
+        
+        topic = response.text.strip()
+        
+        # Clean up the topic (remove quotes, extra spaces, etc.)
+        topic = topic.replace('"', '').replace("'", '').strip()
+        
+        # Ensure it's not too long (fallback)
+        words = topic.split()
+        if len(words) > 5:
+            topic = ' '.join(words[:5])
+
+        return jsonify({
+            "topic": topic,
+            "notes": "Topic generated using Gemini 1.5 Flash"
+        })
+
+
+    except Exception as e:
+        logger.error(f"Error generating YouTube topic: {e}")
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     debug = os.getenv('DEBUG', 'False').lower() == 'true'
@@ -709,5 +1007,6 @@ if __name__ == '__main__':
     logger.info(f"Debug mode: {debug}")
     logger.info(f"YouTube API key configured: {bool(YOUTUBE_API_KEY)}")
     logger.info(f"Gemini API key configured: {bool(GEMINI_API_KEY)}")
-    
+    logger.info(f"Gemini Flash API key configured: {bool(GEMINI_FLASH_KEY)}")
+
     app.run(host='0.0.0.0', port=port, debug=debug)

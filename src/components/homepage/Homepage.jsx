@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import SearchResults from '../search/SearchResults';
 import StudyPlanner from '../studyplanner/StudyPlanner'; 
+import DiagramExplainer from '../diagramexplainer/DiagramExplainer';
 import Login from '../Login/Login';
 import { useAuth } from '../../context/AuthContext';
 import './Homepage.css';
@@ -11,6 +12,7 @@ const Homepage = () => {
   const [searchText, setSearchText] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [showStudyPlanner, setShowStudyPlanner] = useState(false);
+  const [showDiagramExplainer, setShowDiagramExplainer] = useState(false);
   const [currentQuery, setCurrentQuery] = useState('');
   const [showLoginTag, setShowLoginTag] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -105,6 +107,7 @@ const Homepage = () => {
   const handleBackToHome = () => {
     setShowSearchResults(false);
     setShowStudyPlanner(false); 
+    setShowDiagramExplainer(false);
     setCurrentQuery('');
     setSearchText('');
   };
@@ -175,6 +178,20 @@ const Homepage = () => {
     setShowStudyPlanner(false);
   };
 
+  const handleDiagramExplainer = () => {
+    setShowDiagramExplainer(true);
+  };
+
+  const handleBackFromDiagramExplainer = () => {
+    setShowDiagramExplainer(false);
+  };
+
+  const handleSearchYouTube = (searchQuery) => {
+    setCurrentQuery(searchQuery);
+    setShowSearchResults(true);
+    setShowDiagramExplainer(false); 
+  };
+
   const handleLoginRequired = () => {
     if (isAuthenticated) return; // Don't show if already logged in
     
@@ -213,6 +230,16 @@ const Homepage = () => {
   if (showStudyPlanner) {
     return <StudyPlanner onBack={handleBackFromStudyPlanner} />;
   }
+
+  if (showDiagramExplainer) {
+    return (
+    <DiagramExplainer 
+      onBack={handleBackFromDiagramExplainer}
+      onSearchYouTube={handleSearchYouTube}
+    />
+    );
+  }
+  
 
   if (showSearchResults) {
     return (
@@ -408,10 +435,10 @@ const Homepage = () => {
                 <h3>Study Planner</h3>
                 <p>Use the website's study planner to effectively plan your adventure</p>
               </div>
-              <div className="feature-card">
-                <div className="feature-icon">🎥</div>
-                <h3>Video Generation</h3>
-                <p>Create fun videos to gain better understanding!</p>
+              <div className="feature-card" onClick={handleDiagramExplainer} style={{ cursor: 'pointer' }}>
+                <div className="feature-icon">🔍</div>
+                <h3>Explain Diagram/Image</h3>
+                <p>Upload or capture images to get detailed explanations and study notes!</p>
               </div>
               <div className="feature-card">
                 <div className="feature-icon">🧠</div>
