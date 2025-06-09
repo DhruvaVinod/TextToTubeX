@@ -515,23 +515,23 @@ const SearchResults = ({ searchQuery, onBack }) => {
           </button>
           <h2>Choose Language for Summary</h2>
         </div>
-
-        <div className="results-content">
-          <div className="selected-video-info">
-            <div className="video-thumbnail">
-              <img 
-                src={selectedVideo.thumbnail} 
-                alt={selectedVideo.title}
-                className="thumbnail-image"
-              />
-            </div>
-            <div className="video-details">
-              <h3>{selectedVideo.title}</h3>
-              <p>{selectedVideo.channel}</p>
-            </div>
+         
+        <div className="results-content" style={{ padding: '20px', paddingTop: '0px' }}>
+          <div className="selected-video-info" style={{ marginTop: '25px', marginBottom: '5px' }}>
+              <div className="video-thumbnail">
+                <img 
+                  src={selectedVideo.thumbnail}
+                  alt={selectedVideo.title}
+                  className="thumbnail-image"
+                />
+              </div>
+              <div className="video-details">
+                <h3>{selectedVideo.title}</h3>
+                <p>{selectedVideo.channel}</p>
+              </div>
           </div>
-
-          <div className="language-grid">
+           
+          <div className="language-grid" style={{ marginTop: '-500px', marginLeft: '500px'}}>
             {Object.entries(languages).map(([languageName, languageCode]) => (
               <button 
                 key={languageCode}
@@ -547,7 +547,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
       </div>
     );
   }
-
+   
   if (showSummarySelection) {
     return (
       <div className="search-results">
@@ -559,14 +559,14 @@ const SearchResults = ({ searchQuery, onBack }) => {
           </button>
           <h2>Create summary for which video?</h2>
         </div>
-
+         
         <div className="results-content">
           <div className="video-grid">
             {videos.map((video) => (
               <div key={video.id} className="video-card" onClick={() => handleVideoSelect(video)}>
                 <div className="video-thumbnail">
                   <img 
-                    src={video.thumbnail} 
+                    src={video.thumbnail}
                     alt={video.title}
                     className="thumbnail-image"
                     onError={(e) => {
