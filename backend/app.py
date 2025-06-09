@@ -30,7 +30,7 @@ import urllib3
 from urllib3.poolmanager import PoolManager
 from urllib3.util import connection
 import socket
-
+from werkzeug.utils import secure_filename
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -904,6 +904,519 @@ def upload_image():
         return jsonify({
             'error': str(e)
         }), 500
+
+# Configure upload settings
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'}
+MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
+
+# Ensure upload directory exists
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Initialize EasyOCR reader (you can add more languages as needed)
+# This will download models on first use - might take some time
+try:
+    # Initialize with English by default. Add more languages like ['en', 'ar', 'fr'] as needed
+    ocr_reader = easyocr.Reader(['en'], gpu=False)  # Set gpu=True if you have CUDA available
+    logger.info("EasyOCR reader initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize EasyOCR reader: {e}")
+    ocr_reader = None
+
+# Supported languages for quiz generation
+SUPPORTED_LANGUAGES = {
+    'English': 'en',
+    'Hindi': 'hi',
+    'Tamil': 'ta',
+    'Telugu': 'te',
+    'Kannada': 'kn',
+    'Malayalam': 'ml',
+    'Bengali': 'bn',
+    'Gujarati': 'gu',
+    'Marathi': 'mr',
+    'Punjabi': 'pa',
+    'Urdu': 'ur',
+    'Odia': 'or',
+    'Assamese': 'as'
+}
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def extract_text_from_image(image_data, is_base64=False):
+    """
+    Extract text from image using EasyOCR
+    """
+    try:
+        if ocr_reader is None:
+            return {
+                'text': '',
+                'confidence': None,
+                'success': False,
+                'error': 'EasyOCR reader not initialized'
+            }
+        
+        if is_base64:
+            # Handle base64 image data from camera
+            if image_data.startswith('data:image'):
+                image_data = image_data.split(',')[1]
+            
+            image_bytes = base64.b64decode(image_data)
+            image = Image.open(io.BytesIO(image_bytes))
+        else:
+            # Handle file upload
+            image = Image.open(image_data)
+        
+        # Convert PIL image to numpy array for EasyOCR
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+        
+        image_array = np.array(image)
+        
+        # Extract text using EasyOCR
+        # readtext returns list of tuples: (bbox, text, confidence)
+        results = ocr_reader.readtext(image_array)
+        
+        if not results:
+            return {
+                'text': '',
+                'confidence': 0.0,
+                'success': True,
+                'details': []
+            }
+        
+        # Extract text and calculate average confidence
+        extracted_texts = []
+        confidences = []
+        details = []
+        
+        for (bbox, text, confidence) in results:
+            if text.strip():  # Only include non-empty text
+                extracted_texts.append(text.strip())
+                confidences.append(confidence)
+                details.append({
+                    'text': text.strip(),
+                    'confidence': round(confidence, 3),
+                    'bbox': bbox
+                })
+        
+        # Combine all text with newlines
+        full_text = '\n'.join(extracted_texts)
+        
+        # Calculate average confidence
+        avg_confidence = sum(confidences) / len(confidences) if confidences else 0.0
+        
+        return {
+            'text': full_text,
+            'confidence': round(avg_confidence, 3),
+            'success': True,
+            'details': details,  # Individual text blocks with their confidence scores
+            'word_count': len(extracted_texts)
+        }
+    
+    except Exception as e:
+        logger.error(f"EasyOCR extraction error: {e}")
+        return {
+            'text': '',
+            'confidence': None,
+            'success': False,
+            'error': str(e)
+        }
+
+@app.route('/api/generate-quiz', methods=['POST'])
+def generate_quiz():
+    """
+    Enhanced API endpoint to generate quiz questions using Gemini AI with language support
+    Supports both topic-based and document-based quiz generation
+    """
+    try:
+        # Check if Gemini API is configured
+        if not GEMINI_API_KEY:
+            return jsonify({
+                'error': 'Gemini API key not configured'
+            }), 500
+        
+        # Get request data
+        data = request.get_json()
+        if not data or 'level' not in data:
+            return jsonify({
+                'error': 'level parameter is required'
+            }), 400
+        
+        level = data['level'].strip().lower()
+        num_questions = data.get('num_questions', 5)
+        language = data.get('language', 'English')  # Default to English
+        
+        # Validate language
+        if language not in SUPPORTED_LANGUAGES:
+            return jsonify({
+                'error': f'Unsupported language. Supported languages: {list(SUPPORTED_LANGUAGES.keys())}'
+            }), 400
+        
+        # Check if we have either topic or document_content
+        topic = data.get('topic', '').strip()
+        document_content = data.get('document_content', '').strip()
+        
+        if not topic and not document_content:
+            return jsonify({
+                'error': 'Either topic or document_content parameter is required'
+            }), 400
+        
+        if level not in ['beginner', 'intermediate', 'advanced']:
+            return jsonify({
+                'error': 'Invalid level. Must be beginner, intermediate, or advanced'
+            }), 400
+        
+        # Determine the source and generate appropriate quiz
+        if document_content:
+            logger.info(f"Generating {num_questions} {level} level questions from document content ({len(document_content)} chars) in {language}")
+            questions = generate_quiz_from_document(document_content, level, num_questions, language)
+            source_type = 'document'
+            source_info = f"Document content ({len(document_content)} characters)"
+        else:
+            logger.info(f"Generating {num_questions} {level} level questions for topic: {topic} in {language}")
+            questions = generate_quiz_questions(topic, level, num_questions, language)
+            source_type = 'topic'
+            source_info = topic
+        
+        logger.info(f"Successfully generated {len(questions)} questions in {language}")
+        
+        return jsonify({
+            'source_type': source_type,
+            'source_info': source_info,
+            'level': level,
+            'language': language,
+            'questions': questions,
+            'count': len(questions)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in generate quiz endpoint: {e}")
+        return jsonify({
+            'error': str(e)
+        }), 500
+    
+@app.route('/api/supported-languages', methods=['GET'])
+def get_supported_languages():
+    """
+    Get list of supported languages for quiz generation
+    """
+    return jsonify({
+        'languages': list(SUPPORTED_LANGUAGES.keys()),
+        'default': 'English'
+    })
+
+def generate_quiz_from_document(document_content: str, level: str, num_questions: int, language: str = 'English') -> List[Dict]:
+    """
+    Generate quiz questions from document content using Gemini AI with language support
+    """
+    try:
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        
+        # Define difficulty descriptions
+        difficulty_descriptions = {
+            'beginner': 'basic, foundational concepts that are easy to understand',
+            'intermediate': 'moderate difficulty requiring some knowledge and understanding',
+            'advanced': 'challenging questions requiring deep knowledge and critical thinking'
+        }
+        
+        # Truncate document content if too long (keep first 3000 characters)
+        if len(document_content) > 3000:
+            document_content = document_content[:3000] + "..."
+            logger.info("Document content truncated to 3000 characters for processing")
+        
+        # Language-specific instructions
+        language_instruction = ""
+        if language != 'English':
+            language_instruction = f"\n\nIMPORTANT: Generate all questions, options, and explanations in {language} language. Ensure proper grammar and natural language flow in {language}."
+        
+        prompt = f"""
+        Based on the following document content, generate {num_questions} multiple choice questions at {level} level.
+        
+        Document Content:
+        {document_content}
+        
+        Level Description: {difficulty_descriptions[level]}
+        {language_instruction}
+        
+        Format your response as a JSON array where each question has this structure:
+        {{
+            "question": "The question text based on the document",
+            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "correct": 0,
+            "explanation": "Brief explanation of the correct answer with reference to the document"
+        }}
+        
+        Requirements:
+        - Each question should have exactly 4 options
+        - The "correct" field should be the index (0-3) of the correct answer
+        - Questions should be at {level} difficulty level
+        - Base all questions on the provided document content
+        - Include clear, helpful explanations that reference the document
+        - Make questions engaging and educational
+        - Ensure factual accuracy based on the document
+        - Vary question types (factual, conceptual, analytical)
+        - If the document doesn't contain enough information for {num_questions} questions, generate as many as possible
+        {"- All content must be in " + language + " language" if language != 'English' else ""}
+        
+        Level: {level}
+        Number of questions: {num_questions}
+        Language: {language}
+        
+        Return only the JSON array, no additional text.
+        """
+        
+        response = model.generate_content(prompt)
+        
+        # Clean the response text
+        response_text = response.text.strip()
+        
+        # Remove markdown code fences if present
+        if response_text.startswith('```json'):
+            response_text = response_text[7:]
+        if response_text.startswith('```'):
+            response_text = response_text[3:]
+        if response_text.endswith('```'):
+            response_text = response_text[:-3]
+        
+        response_text = response_text.strip()
+        
+        try:
+            questions = json.loads(response_text)
+            
+            # Validate the questions structure
+            validated_questions = []
+            for i, q in enumerate(questions):
+                if validate_question_structure(q):
+                    validated_questions.append(q)
+                else:
+                    logger.warning(f"Invalid question structure at index {i}: {q}")
+            
+            if not validated_questions:
+                raise Exception("No valid questions generated from document")
+            
+            return validated_questions[:num_questions]  # Ensure we don't exceed requested number
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON response: {e}")
+            logger.error(f"Response text: {response_text}")
+            
+            # Fallback: generate generic questions based on document
+            return generate_document_fallback_questions(document_content, level, num_questions, language)
+            
+    except Exception as e:
+        logger.error(f"Error generating quiz questions from document: {e}")
+        return generate_document_fallback_questions(document_content, level, num_questions, language)
+
+def generate_quiz_questions(topic: str, level: str, num_questions: int, language: str = 'English') -> List[Dict]:
+    """
+    Generate quiz questions using Gemini AI with language support
+    """
+    try:
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        
+        # Define difficulty descriptions
+        difficulty_descriptions = {
+            'beginner': 'basic, foundational concepts that are easy to understand',
+            'intermediate': 'moderate difficulty requiring some knowledge and understanding',
+            'advanced': 'challenging questions requiring deep knowledge and critical thinking'
+        }
+        
+        # Language-specific instructions
+        language_instruction = ""
+        if language != 'English':
+            language_instruction = f"\n\nIMPORTANT: Generate all questions, options, and explanations in {language} language. Ensure proper grammar and natural language flow in {language}."
+        
+        prompt = f"""
+        Generate {num_questions} multiple choice questions about {topic} at {level} level.
+        
+        Level Description: {difficulty_descriptions[level]}
+        {language_instruction}
+        
+        Format your response as a JSON array where each question has this structure:
+        {{
+            "question": "The question text",
+            "options": ["Option A", "Option B", "Option C", "Option D"],
+            "correct": 0,
+            "explanation": "Brief explanation of the correct answer"
+        }}
+        
+        Requirements:
+        - Each question should have exactly 4 options
+        - The "correct" field should be the index (0-3) of the correct answer
+        - Questions should be at {level} difficulty level
+        - Include clear, helpful explanations
+        - Make questions engaging and educational
+        - Ensure factual accuracy
+        - Vary question types (conceptual, factual, analytical)
+        {"- All content must be in " + language + " language" if language != 'English' else ""}
+        
+        Topic: {topic}
+        Level: {level}
+        Number of questions: {num_questions}
+        Language: {language}
+        
+        Return only the JSON array, no additional text.
+        """
+        
+        response = model.generate_content(prompt)
+        
+        # Clean the response text
+        response_text = response.text.strip()
+        
+        # Remove markdown code fences if present
+        if response_text.startswith('```json'):
+            response_text = response_text[7:]
+        if response_text.startswith('```'):
+            response_text = response_text[3:]
+        if response_text.endswith('```'):
+            response_text = response_text[:-3]
+        
+        response_text = response_text.strip()
+        
+        try:
+            questions = json.loads(response_text)
+            
+            # Validate the questions structure
+            validated_questions = []
+            for i, q in enumerate(questions):
+                if validate_question_structure(q):
+                    validated_questions.append(q)
+                else:
+                    logger.warning(f"Invalid question structure at index {i}: {q}")
+            
+            if not validated_questions:
+                raise Exception("No valid questions generated")
+            
+            return validated_questions[:num_questions]  # Ensure we don't exceed requested number
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse JSON response: {e}")
+            logger.error(f"Response text: {response_text}")
+            
+            # Fallback: try to extract questions manually
+            return generate_fallback_questions(topic, level, num_questions, language)
+            
+    except Exception as e:
+        logger.error(f"Error generating quiz questions: {e}")
+        return generate_fallback_questions(topic, level, num_questions, language)
+
+def validate_question_structure(question: Dict) -> bool:
+    """
+    Validate that a question has the correct structure
+    """
+    required_fields = ['question', 'options', 'correct', 'explanation']
+    
+    # Check if all required fields are present
+    if not all(field in question for field in required_fields):
+        return False
+    
+    # Check if options is a list with 4 items
+    if not isinstance(question['options'], list) or len(question['options']) != 4:
+        return False
+    
+    # Check if correct is a valid index
+    if not isinstance(question['correct'], int) or question['correct'] < 0 or question['correct'] > 3:
+        return False
+    
+    # Check if question and explanation are strings
+    if not isinstance(question['question'], str) or not isinstance(question['explanation'], str):
+        return False
+    
+    return True
+
+def generate_document_fallback_questions(document_content: str, level: str, num_questions: int, language: str = 'English') -> List[Dict]:
+    """
+    Generate fallback questions when AI generation fails for document content
+    """
+    # Extract some key terms from the document for basic questions
+    words = document_content.split()
+    key_terms = [word.strip('.,!?;:') for word in words if len(word) > 6][:10]
+    
+    fallback_questions = []
+    
+    # Basic fallback questions in English (could be enhanced with translation)
+    for i in range(min(num_questions, 3)):
+        if i < len(key_terms):
+            term = key_terms[i]
+            fallback_questions.append({
+                "question": f"Based on the document, what is mentioned about '{term}'?",
+                "options": [
+                    "It is discussed in detail",
+                    "It is briefly mentioned", 
+                    "It is not mentioned",
+                    "It is criticized"
+                ],
+                "correct": 1,
+                "explanation": f"The term '{term}' appears in the provided document content."
+            })
+        else:
+            fallback_questions.append({
+                "question": f"What type of content does this document appear to contain?",
+                "options": [
+                    "Technical information",
+                    "Literary content", 
+                    "Historical data",
+                    "Scientific research"
+                ],
+                "correct": 0,
+                "explanation": "Based on the document structure and content, it appears to contain technical information."
+            })
+    
+    return fallback_questions[:num_questions]
+
+def generate_fallback_questions(topic: str, level: str, num_questions: int, language: str = 'English') -> List[Dict]:
+    """
+    Generate fallback questions when AI generation fails
+    """
+    # Fallback questions based on level and topic (in English)
+    fallback_questions = {
+        'beginner': [
+            {
+                "question": f"What is a fundamental concept in {topic}?",
+                "options": ["Basic principle", "Advanced theory", "Complex algorithm", "Expert technique"],
+                "correct": 0,
+                "explanation": f"At beginner level, we focus on basic principles in {topic}."
+            },
+            {
+                "question": f"Which of the following is most important for beginners in {topic}?",
+                "options": ["Understanding basics", "Advanced techniques", "Expert knowledge", "Complex theories"],
+                "correct": 0,
+                "explanation": f"Beginners should focus on understanding the basics of {topic}."
+            }
+        ],
+        'intermediate': [
+            {
+                "question": f"What is an intermediate concept in {topic}?",
+                "options": ["Basic idea", "Moderate complexity topic", "Expert level theory", "Simple concept"],
+                "correct": 1,
+                "explanation": f"Intermediate level involves moderate complexity topics in {topic}."
+            },
+            {
+                "question": f"Which skill is important at intermediate level in {topic}?",
+                "options": ["Basic understanding", "Applied knowledge", "Expert mastery", "Simple recognition"],
+                "correct": 1,
+                "explanation": f"Intermediate level requires applied knowledge in {topic}."
+            }
+        ],
+        'advanced': [
+            {
+                "question": f"What characterizes advanced understanding of {topic}?",
+                "options": ["Basic knowledge", "Simple concepts", "Deep expertise", "Elementary ideas"],
+                "correct": 2,
+                "explanation": f"Advanced level requires deep expertise in {topic}."
+            },
+            {
+                "question": f"Which approach is typical of advanced {topic} practice?",
+                "options": ["Simple methods", "Basic techniques", "Sophisticated strategies", "Elementary approaches"],
+                "correct": 2,
+                "explanation": f"Advanced practice involves sophisticated strategies in {topic}."
+            }
+        ]
+    }
+    
+    questions = fallback_questions.get(level, fallback_questions['beginner'])
+    return questions[:num_questions]
 
 @app.route('/api/analyze-diagram', methods=['POST'])
 def analyze_diagram():
