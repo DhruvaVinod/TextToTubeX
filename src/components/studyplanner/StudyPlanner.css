@@ -1274,8 +1274,20 @@
 /* Formatted plan text with better spacing */
 .plan-text.formatted {
   line-height: 1.8;
-  white-space: pre-line;
+  white-space: pre-wrap; /* allows text to wrap and preserve spacing */
+  word-wrap: break-word; /* ensures long words or links break instead of overflowing */
+  overflow-wrap: break-word;
+  text-align: left; /* ensure left alignment */
+  font-size: 1rem;
+  max-width: 100%;
 }
+.plan-content.enhanced,
+.plan-text.formatted {
+  max-height: none !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
 
 .plan-text.formatted h3,
 .plan-text.formatted h4 {
