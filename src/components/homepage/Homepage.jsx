@@ -154,7 +154,7 @@ const Homepage = () => {
       handleLoginRequired();
       return;
     }
-    alert('Quizzes feature coming soon!');
+    navigate('/quiz');
   };
 
   const handleSignIn = () => {

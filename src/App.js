@@ -6,6 +6,7 @@ import StudyPlanner from './components/studyplanner/StudyPlanner';
 import StudyResult from './components/studyplanner/StudyResult';
 import MyStudyPlans from './components/studyplanner/MyStudyPlans';
 import PreviousSummaries from './components/search/PreviousSummaries';
+import Quiz from './components/quiz/Quiz';
 import './App.css';
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
             <Route path="/study-result" element={<StudyResult />} />
             <Route path="/my-study-plans" element={<MyStudyPlans />} />
             <Route path="/previous-summaries" element={<PreviousSummaries />} />
+            <Route path="/quiz" element={<Quiz />} />
           </Routes>
         </div>
       </Router>
