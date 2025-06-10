@@ -6,6 +6,7 @@ import Login from '../Login/Login';
 import { useAuth } from '../../context/AuthContext';
 import './Homepage.css';
 import { useNavigate } from 'react-router-dom';
+import Quiz from '../quiz/Quiz';
 
 const Homepage = () => {
   const [isNavOpen, setIsNavOpen] = useState(false);
@@ -440,11 +441,11 @@ const Homepage = () => {
                 <h3>Explain Diagram/Image</h3>
                 <p>Upload or capture images to get detailed explanations and study notes!</p>
               </div>
-              <div className="feature-card">
+              <div className="feature-card" onClick={handleQuizzes} style={{ cursor: 'pointer' }}>
                 <div className="feature-icon">🧠</div>
                 <h3>Smart Quizzes</h3>
                 <p>Generate personalized quizzes from your materials</p>
-              </div>
+                </div>
             </div>
 
             {showCamera && (

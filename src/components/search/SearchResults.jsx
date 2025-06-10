@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import './SearchResults.css';
+import { useNavigate } from 'react-router-dom';
 
 const SearchResults = ({ searchQuery, onBack }) => {
+  const navigate = useNavigate();
+
   const [isLoading, setIsLoading] = useState(true);
   const [currentFactIndex, setCurrentFactIndex] = useState(0);
   const [showResults, setShowResults] = useState(false);
@@ -36,14 +39,36 @@ const SearchResults = ({ searchQuery, onBack }) => {
   };
 
   const funFacts = [
-    "Did you know? The human brain can process visual information 60,000 times faster than text!",
-    "Fun fact: YouTube has over 2 billion logged-in monthly users worldwide.",
-    "Amazing! The average person remembers 65% of visual information after three days.",
-    "Cool fact: Video content is 50x more likely to drive organic search results than plain text.",
-    "Interesting: Your brain processes images in as little as 13 milliseconds!",
-    "Did you know? Educational videos can improve learning retention by up to 400%.",
-    "Fun fact: The human attention span averages 8 seconds, but videos can hold it longer!",
-    "Amazing! Visual learners make up about 65% of the population."
+    "Did you know? Google processes over 8.5 billion searches every single day!",
+    "Fun fact: Google's original name was 'BackRub' before Larry Page and Sergey Brin changed it to Google.",
+    "Amazing! Google Translate supports over 130 languages and translates more than 100 billion words daily.",
+    "Cool fact: Gmail was announced on April 1, 2004, and many people thought it was an April Fools' joke!",
+    "Interesting: Google's headquarters is called the Googleplex, located in Mountain View, California.",
+    "Did you know? YouTube uploads over 500 hours of video content every minute!",
+    "Fun fact: Google Chrome is the world's most popular web browser, used by over 3 billion people.",
+    "Amazing! Google Drive stores over 2 trillion files and has more than 1 billion users worldwide.",
+    "Cool fact: Google Maps has mapped over 220 countries and territories, including Street View imagery.",
+    "Interesting: Google's search algorithm uses more than 200 factors to rank web pages in search results.",
+    "Did you know? Google Docs, Sheets, and Slides allow real-time collaboration with unlimited revision history.",
+    "Fun fact: Google's PageRank algorithm was named after Larry Page, one of Google's co-founders.",
+    "Amazing! Google Photos stores over 4 trillion photos and offers 15GB of free storage per account.",
+    "Cool fact: Google Scholar indexes over 160 million academic documents and research papers.",
+    "Interesting: Google Classroom is used by over 150 million students and teachers worldwide.",
+    "Did you know? Google's 'I'm Feeling Lucky' button bypasses search results and takes you directly to the first result.",
+    "Fun fact: Google Earth has captured imagery of over 98% of the world's population areas.",
+    "Amazing! Google Assistant can understand and respond in over 30 languages across 90+ countries.",
+    "Cool fact: Google Lens can identify over 1 billion objects, including plants, animals, and landmarks.",
+    "Interesting: Google's data centers use 50% less energy than typical data centers through innovative cooling systems.",
+    "Did you know? Google Search can perform calculations, unit conversions, and even solve math equations directly.",
+    "Fun fact: Google Keep lets you search for notes by drawing or sketching what you're looking for.",
+    "Amazing! Google Meet can host video calls with up to 500 participants in enterprise accounts.",
+    "Cool fact: Google Trends shows what the world is searching for in real-time and historical data.",
+    "Interesting: Google's autocomplete feature processes search queries in less than 0.2 seconds.",
+    "Did you know? Google Play Store has over 2.8 million apps available for Android devices.",
+    "Fun fact: Google's logo has been changed over 5,000 times with special Doodles since 1998.",
+    "Amazing! Google Forms can automatically grade quizzes and provides instant feedback to students.",
+    "Cool fact: Google Sites allows you to create websites without any coding knowledge required.",
+    "Interesting: Google's mission statement is 'to organize the world's information and make it universally accessible and useful.'"
   ];
 
   // Function to search YouTube videos
@@ -259,7 +284,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
   };
 
   const handleReadyForQuiz = () => {
-    alert('someone do the quiz page');
+    navigate('/quiz', { state: { quizTopic: searchQuery } });
   };
 
   const handleVideoClick = (video) => {
@@ -531,7 +556,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
               </div>
           </div>
            
-          <div className="language-grid" style={{ marginTop: '-500px', marginLeft: '500px'}}>
+          <div className="language-grid" style={{ marginTop: '-450px', marginLeft: '550px'}}>
             {Object.entries(languages).map(([languageName, languageCode]) => (
               <button 
                 key={languageCode}
@@ -574,7 +599,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
                       e.target.nextSibling.style.display = 'flex';
                     }}
                   />
-                  <div className="thumbnail-icon" style={{ display: 'none' }}>🎥</div>
+                  <div className="thumbnail-icon" >🎥</div>
                   <div className="video-duration">{video.duration}</div>
                 </div>
                 <div className="video-info">
@@ -680,7 +705,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
                     e.target.nextSibling.style.display = 'flex';
                   }}
                 />
-                <div className="thumbnail-icon" style={{ display: 'none' }}>🎥</div>
+                <div className="thumbnail-icon" style={{ display: 'box' }}>🎥</div>
                 <div className="video-duration">{video.duration}</div>
                 {video.relevanceScore && (
                   <div className="relevance-score">
@@ -704,10 +729,10 @@ const SearchResults = ({ searchQuery, onBack }) => {
               <div className="btn-icon">📄</div>
               <span>Generate Summary</span>
             </button>
-            <button className="action-btn quiz-btn" onClick={handleReadyForQuiz}>
-              <div className="btn-icon">🧩</div>
-              <span>Ready for a Quiz?</span>
-            </button>
+            <button className="action-btn quiz-btn" onClick={handleReadyForQuiz}> 
+            <div className="btn-icon">🧩</div>
+            <span>Ready for a Quiz?</span>
+          </button>
           </div>
         </div>
       </div>

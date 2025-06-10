@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import './Quiz.css';
 
 const Quiz = () => {
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [currentStep, setCurrentStep] = useState('setup'); // setup, quiz, results
+  const initialTopic = location.state?.quizTopic || '';
+
+  const [isCameraReady, setIsCameraReady] = useState(false); 
+  const [currentStep, setCurrentStep] = useState('setup');
   const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState('English');
   const [availableLanguages, setAvailableLanguages] = useState([]);
-  const [topic, setTopic] = useState('');
+  const [topic, setTopic] = useState(initialTopic); // Initialize topic with the passed value
   const [questions, setQuestions] = useState([]);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState({});
@@ -19,6 +23,7 @@ const Quiz = () => {
   const [quizResults, setQuizResults] = useState(null);
   const [userPosition, setUserPosition] = useState({ old: null, new: null });
   const [leaderboard, setLeaderboard] = useState([]);
+
   
   // New states for document features
   const [showCamera, setShowCamera] = useState(false);
@@ -607,7 +612,7 @@ const renderSetup = () => (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                   <div className="action-buttons">
                     <button
-                      onClick={() => setShowCamera(true)}
+                      onClick={handleScanText} 
                       disabled={isProcessing}
                       className="action-btn scan-btn"
                       style={{
@@ -739,16 +744,20 @@ const renderSetup = () => (
                 </div>
                 
                 <video
-                  ref={(video) => {
-                    if (video && cameraStream) {
-                      video.srcObject = cameraStream;
-                      video.play();
-                    }
-                  }}
-                  className="camera-video"
-                  playsInline
-                  muted
-                />
+                id="cameraVideo"
+        ref={(videoElement) => { // Renamed 'video' to 'videoElement' for clarity
+          if (videoElement && cameraStream) { //
+            videoElement.srcObject = cameraStream; //
+            videoElement.onloadedmetadata = () => { // Add this event listener
+              videoElement.play(); //
+              setIsCameraReady(true); // Set camera ready after metadata loads
+            };
+          }
+        }}
+        className="camera-video"
+        playsInline
+        muted
+      />
                 
                 <div className="camera-controls">
                   <button
