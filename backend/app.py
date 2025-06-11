@@ -38,7 +38,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["https://deplyment-462519.web.app"])
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -144,7 +144,7 @@ class VideoProcessor:
                 "restricted": True,
                 "reason": f"Unable to verify copyright status: {str(e)}"
             } 
-             
+
     def download_video_audio(self, video_id: str) -> str:
         try:
             video_url = f"https://www.youtube.com/watch?v={video_id}"
