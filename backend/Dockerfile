@@ -1,6 +1,10 @@
+# Use Python 3.11 slim image
 FROM python:3.11-slim
 
-# Install system dependencies including ffmpeg
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     libgl1-mesa-glx \
@@ -9,15 +13,32 @@ RUN apt-get update && apt-get install -y \
     libxext6 \
     libxrender-dev \
     libgomp1 \
+    wget \
+    curl \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+# Install yt-dlp
+RUN pip install yt-dlp
 
+# Copy requirements first for better caching
 COPY requirements.txt .
+
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy application code
 COPY . .
 
-ENV PORT 8080
+# Create uploads directory
+RUN mkdir -p uploads
 
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "300", "app:app"]
+# Expose port
+EXPOSE 8080
+
+# Set environment variables
+ENV PORT=8080
+ENV PYTHONUNBUFFERED=1
+
+# Run the application
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "1", "--threads", "8", "--timeout", "300", "app:app"]

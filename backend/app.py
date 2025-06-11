@@ -38,7 +38,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, origins=["https://deplyment-462519.web.app"])
+CORS(app, 
+     origins=[
+         'https://deplyment-462519.web.app', 
+         'http://localhost:3000', 
+         'http://localhost:8080',
+         'https://youtube-analyzer-xxxxx-uc.a.run.app'  # Add your Cloud Run URL
+     ],
+     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+     allow_headers=['Content-Type', 'Authorization'],
+     supports_credentials=True)
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -68,6 +77,10 @@ if not os.getenv('DEBUG', 'False').lower() == 'true':
 
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+
+@app.route("/")
+def home():
+    return "Backend is running!"
 
 def get_ffmpeg_path():
     """Get ffmpeg path based on environment"""

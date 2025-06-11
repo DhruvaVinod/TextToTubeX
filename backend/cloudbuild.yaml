@@ -1,0 +1,39 @@
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/youtube-analyzer:$BUILD_ID', '.']
+  
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/youtube-analyzer:$BUILD_ID']
+  
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+    - 'run'
+    - 'deploy'
+    - 'youtube-analyzer'
+    - '--image'
+    - 'gcr.io/$PROJECT_ID/youtube-analyzer:$BUILD_ID'
+    - '--region'
+    - 'us-central1'
+    - '--platform'
+    - 'managed'
+    - '--allow-unauthenticated'
+    - '--memory'
+    - '2Gi'
+    - '--cpu'
+    - '2'
+    - '--timeout'
+    - '3600'
+    - '--max-instances'
+    - '10'
+    - '--set-env-vars'
+    - 'YOUTUBE_API_KEY=${AIzaSyD6hKgUxy-91DW8AnaTrc7nvDHUfWazi_0},GEMINI_API_KEY=${AIzaSyDDwEucj4KNsnUT4m4qpt1pwnByhm6_vjM},GEMINI_FLASH_KEY=${AIzaSyB8sq90UaIy8KJxIMazbhUfc6vl4rfExzQ}'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  diskSizeGb: '100'
+
+timeout: '1200s'

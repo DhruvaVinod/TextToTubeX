@@ -151,7 +151,7 @@ const DiagramExplainer = ({ onBack, onSearchYouTube }) => {
     formData.append('image', selectedImage);
 
     try {
-      const res = await fetch('https://your-app-136108111450.us-central1.run.app/api/analyze-diagram', { 
+      const res = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/analyze-diagram', { 
         method: 'POST', 
         body: formData 
       });
@@ -180,7 +180,7 @@ const DiagramExplainer = ({ onBack, onSearchYouTube }) => {
   // Generate YouTube search topic using Gemini API
   const generateYouTubeTopic = async (explanation) => {
     try {
-      const response = await fetch('https://your-app-136108111450.us-central1.run.app/api/generate-youtube-topic', {
+      const response = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/generate-youtube-topic', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
