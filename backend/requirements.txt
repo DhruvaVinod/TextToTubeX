@@ -1,6 +1,7 @@
 # Core Flask dependencies
 flask==2.3.3
 flask_cors==4.0.0
+huggingface_hub==0.14.1
 
 # Environment and configuration
 python-dotenv==1.0.0
@@ -25,19 +26,18 @@ google.generativeai==0.3.2
 deep-translator==1.11.4
 
 # Audio/Video processing
-openai-whisper
+openai-whisper==20231117
 yt-dlp==2025.5.22
 
 # Computer Vision and OCR
-opencv-python
-easyocr
+opencv-python==4.9.0.80
+easyocr==1.7.1
 pillow
 
 # File handling and utilities
-werkzeug
-pathlib2
+werkzeug==2.3.8
 
-torch  # Required by whisper and sentence-transformers
-tokenizers  # Required by transformers
+torch==2.0.2   # Required by whisper and sentence-transformers
+tokenizers==0.15.1  # Required by transformers
 
 gunicorn
