@@ -31,6 +31,8 @@ from urllib3.poolmanager import PoolManager
 from urllib3.util import connection
 import socket
 from werkzeug.utils import secure_filename
+import sys
+import platform
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -54,6 +56,24 @@ GEMINI_FLASH_KEY=os.getenv('GEMINI_FLASH_KEY')
 YOUTUBE_SEARCH_URL = 'https://www.googleapis.com/youtube/v3/search'
 YOUTUBE_VIDEOS_URL = 'https://www.googleapis.com/youtube/v3/videos'
 
+if not os.getenv('DEBUG', 'False').lower() == 'true':
+    # Production configurations
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)s: %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+
+def get_ffmpeg_path():
+    """Get ffmpeg path based on environment"""
+    if platform.system() == "Windows":
+        return 'C:\\ffmpeg\\ffmpeg-7.1.1-essentials_build\\bin\\ffmpeg.exe'
+    else:
+        # For Linux/Unix systems (Render.com)
+        return 'ffmpeg'  # Should be in PATH on Rende
+        
 # Configure Gemini API
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
@@ -121,18 +141,17 @@ class VideoProcessor:
                 "restricted": True,
                 "reason": f"Unable to verify copyright status: {str(e)}"
             }  
-    def download_video_audio(self, video_id: str) -> str:
-        """
-        Download audio from YouTube video using yt-dlp
-        """
+        def download_video_audio(self, video_id: str) -> str:
         try:
             video_url = f"https://www.youtube.com/watch?v={video_id}"
             output_path = os.path.join(self.temp_dir, f"{video_id}.%(ext)s")
             
-            # Use yt-dlp to download audio only
+            # Dynamic ffmpeg path
+            ffmpeg_path = get_ffmpeg_path()
+            
             cmd = [
                 'yt-dlp',
-                '--ffmpeg-location','C:\\ffmpeg\\ffmpeg-7.1.1-essentials_build\\bin\\ffmpeg.exe',
+                '--ffmpeg-location', ffmpeg_path,
                 '--extract-audio',
                 '--audio-format', 'mp3',
                 '--audio-quality', '192K',
