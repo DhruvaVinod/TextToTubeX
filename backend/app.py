@@ -66,6 +66,9 @@ if not os.getenv('DEBUG', 'False').lower() == 'true':
         ]
     )
 
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 def get_ffmpeg_path():
     """Get ffmpeg path based on environment"""
     if platform.system() == "Windows":
@@ -140,8 +143,9 @@ class VideoProcessor:
             return {
                 "restricted": True,
                 "reason": f"Unable to verify copyright status: {str(e)}"
-            }  
-        def download_video_audio(self, video_id: str) -> str:
+            } 
+             
+    def download_video_audio(self, video_id: str) -> str:
         try:
             video_url = f"https://www.youtube.com/watch?v={video_id}"
             output_path = os.path.join(self.temp_dir, f"{video_id}.%(ext)s")
