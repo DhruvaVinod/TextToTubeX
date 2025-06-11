@@ -74,7 +74,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
   // Function to search YouTube videos
   const searchYouTubeVideos = async (query) => {
     try {
-      const response = await fetch('/api/search-videos', {
+      const response = await fetch('https://your-app-136108111450.us-central1.run.app/api/search-videos', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -97,7 +97,7 @@ const SearchResults = ({ searchQuery, onBack }) => {
   // Function to generate summary
   const generateSummary = async (videoId, language) => {
     try {
-      const response = await fetch('/api/generate-summary', {
+      const response = await fetch('https://your-app-136108111450.us-central1.run.app/api/generate-summary', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
