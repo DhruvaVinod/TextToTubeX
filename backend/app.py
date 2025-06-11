@@ -1513,7 +1513,7 @@ Explanation: {explanation}"""
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    port = int(os.getenv('PORT', 5000))
+    port = int(os.getenv('PORT', 8080))  # Cloud Run uses PORT env variable
     debug = os.getenv('DEBUG', 'False').lower() == 'true'
     
     logger.info(f"Starting YouTube Search and Summarization API on port {port}")

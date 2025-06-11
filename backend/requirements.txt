@@ -39,3 +39,5 @@ pathlib2
 torch  # Required by whisper and sentence-transformers
 transformers  # Required by sentence-transformers
 tokenizers  # Required by transformers
+
+gunicorn
