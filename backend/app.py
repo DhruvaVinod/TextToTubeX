@@ -73,7 +73,7 @@ def get_ffmpeg_path():
     else:
         # For Linux/Unix systems (Render.com)
         return 'ffmpeg'  # Should be in PATH on Rende
-        
+
 # Configure Gemini API
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
@@ -1530,6 +1530,21 @@ Explanation: {explanation}"""
     except Exception as e:
         logger.error(f"Error generating YouTube topic: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.errorhandler(500)
+def handle_500(e):
+    logger.error(f"Server Error: {e}")
+    return jsonify({
+        'error': 'Internal server error',
+        'message': 'Please try again later'
+    }), 500
+
+@app.errorhandler(404)
+def handle_404(e):
+    return jsonify({
+        'error': 'Endpoint not found',
+        'message': 'Please check the API documentation'
+    }), 404
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 8080))  # Cloud Run uses PORT env variable
