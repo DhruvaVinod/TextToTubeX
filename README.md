@@ -140,20 +140,6 @@ TextToTubeX/
 
 ---
 
-## 🤝 Contributing
-
-Got a cool feature idea? Fork the repo, build something awesome, and send us a pull request!
-
-~~~bash
-git checkout -b feature/yourFeature
-git commit -m "Add your feature"
-git push origin feature/yourFeature
-~~~
-
-Then open a pull request 🚀
-
----
-
 ## 💡 Future Improvements
 
 🤝 Collaborative Study Groups
