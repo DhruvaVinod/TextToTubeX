@@ -1,10 +1,8 @@
 # 🎬 TextToTubeX 🚀  
-*Turn your text into tailored YouTube experiences.*
 
-**TextToTubeX** is a revamped version of our earlier project **TextToTube**.  
+With a fresh new UI, smoother flow, and deeper personalization, **TextToTubeX** is your smart gateway to YouTube discovery. 
+
 Give us a sentence, topic, or idea—and we'll fetch the most relevant YouTube videos to match it!
-
-With a fresh new UI, smoother flow, and deeper personalization, it's your smart gateway to YouTube discovery.
 
 👉 **Live Demo:** [https://deplyment-462519.web.app/](https://deplyment-462519.web.app/)
 
