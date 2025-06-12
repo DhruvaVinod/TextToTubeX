@@ -15,7 +15,6 @@ Give us a sentence, topic, or idea—and we'll fetch the most relevant YouTube v
 - 👤 **User Authentication** – Secure Google login/signup with Firebase Auth.
 - ☁️ **Cloud Firestore Integration** – Save user history & personalize suggestions.
 - 🖥 **Responsive UI** – Built with ReactJS + TailwindCSS for clean, adaptive design.
-- ⚡ **Hackathon Ready** – Quick to set up, fun to demo, easy to extend.
 
 ---
 
