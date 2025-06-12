@@ -118,6 +118,15 @@ firebase_admin.initialize_app(cred)
 
 ---
 
+## 🔑 API Keys Required
+To use all features of TextToTubeX, you'll need to set up the following API keys:
+
+- **Gemini API Key** – Used for AI-generated summaries and quizzes.
+  - You'll need a **Gemini Pro** account to access advanced features.
+- **YouTube Data API Key** – Used to fetch relevant YouTube videos based on topics.
+
+We recommend storing these keys securely using `.env` files or your deployment environment's secrets manager.
+
 ## 📁 Folder Structure
 
 ~~~
@@ -127,7 +136,9 @@ TextToTubeX/
 ├── public/               # Static files
 ├── firebase.json         # Firebase project config
 ├── .firebaserc           # Firebase project alias
+├── .env                  # For api keys 
 └── README.md             # This file!
+
 ~~~
 
 ---
