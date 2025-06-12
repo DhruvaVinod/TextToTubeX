@@ -148,11 +148,23 @@ Then open a pull request 🚀
 
 ## 💡 Future Improvements
 
-- 🧠 NLP-powered intent detection
-- 📝 Save user history and sessions
-- 📈 Admin dashboard with insights
-- 🎵 Auto-generated playlists
-- 📚 Student mode: Map textbook content to relevant videos
+🤝 Collaborative Study Groups
+Enable users to form or join groups, share notes, discuss quizzes, and collaborate on study plans.
+
+🎙️ Voice Input & Output
+Allow voice-based input and audio summaries/quizzes to improve accessibility.
+
+🧩 Customizable Quiz Types
+Support formats like fill-in-the-blanks, drag-and-drop, and flashcards.
+
+📊 Study Suggestions
+Analyze quiz performance to recommend topics users should focus on.
+
+👩‍🏫 Teacher Dashboard
+Let educators track student usage, content generated, and quiz performance.
+
+📄 PDF Upload Support
+Enable uploading and processing of PDF files in addition to images.
 
 ---
 
