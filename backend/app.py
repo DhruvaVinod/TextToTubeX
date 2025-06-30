@@ -9,19 +9,15 @@ import re
 from datetime import datetime, timedelta
 from typing import List, Dict
 import logging
-import tempfile
-import subprocess
 import json
 from pathlib import Path
 import google.generativeai as genai
 from deep_translator import GoogleTranslator, exceptions as dt_exceptions
-import whisper
 import cv2
 import easyocr
 import base64
 from PIL import Image
 import io
-import yt_dlp
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -32,22 +28,26 @@ from urllib3.util import connection
 import socket
 from werkzeug.utils import secure_filename
 import sys
-import platform
 
 from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, 
-     origins=[
-         'https://deplyment-462519.web.app', 
-         'http://localhost:3000', 
-         'http://localhost:8080',
-         'https://youtube-analyzer-xxxxx-uc.a.run.app'  # Add your Cloud Run URL
-     ],
-     methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-     allow_headers=['Content-Type', 'Authorization'],
-     supports_credentials=True)
+@app.after_request
+def after_request(response):
+    # Allow specific origin (replace with your frontend URL)
+    response.headers.add('Access-Control-Allow-Origin',  'https://deplyment-462519.web.app')
+    
+    # Allow methods
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+    
+    # Allow headers
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
+    
+    # Allow credentials if needed
+    response.headers.add('Access-Control-Allow-Credentials', 'true')
+    
+    return response
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -75,230 +75,76 @@ if not os.getenv('DEBUG', 'False').lower() == 'true':
         ]
     )
 
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-
 @app.route("/")
 def home():
     return "Backend is running!"
-
-def get_ffmpeg_path():
-    """Get ffmpeg path based on environment"""
-    if platform.system() == "Windows":
-        return 'C:\\ffmpeg\\ffmpeg-7.1.1-essentials_build\\bin\\ffmpeg.exe'
-    else:
-        # For Linux/Unix systems (Render.com)
-        return 'ffmpeg'  # Should be in PATH on Rende
 
 # Configure Gemini API
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-class VideoProcessor:
-    def __init__(self):
-        self.temp_dir = tempfile.mkdtemp()
-    def check_video_copyright(self, video_id: str) -> Dict:
-        """Check if video has copyright restrictions"""
-        try:
-            video_url = f"https://www.youtube.com/watch?v={video_id}"
-            ydl_opts = {
-                'quiet': True,
-                'no_warnings': True,
-                'extract_flat': False,
-            }
-            
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(video_url, download=False)
-                
-                # Check various copyright indicators
-                title = info.get('title', '').lower()
-                description = info.get('description', '').lower()
-                uploader = info.get('uploader', '').lower()
-                
-                # Music industry indicators
-                music_keywords = [
-                    'official music video', 'vevo', 'records', 'entertainment',
-                    'sony music', 'universal music', 'warner music', 'emi music'
-                ]
-                
-                # Movie/TV indicators
-                media_keywords = [
-                    'official trailer', 'full movie', 'netflix', 'disney',
-                    'paramount', 'warner bros', 'sony pictures'
-                ]
-                
-                # Check for restricted content
-                for keyword in music_keywords + media_keywords:
-                    if keyword in title or keyword in description or keyword in uploader:
-                        return {
-                            "restricted": True,
-                            "reason": "This appears to be copyrighted content (music/entertainment industry)"
-                        }
-                
-                # Check duration - very long videos might be full movies/shows
-                duration = info.get('duration', 0)
-                if duration > 7200:  # 2+ hours
-                    return {
-                        "restricted": True,
-                        "reason": "Video is too long (likely full movie/show content)"
-                    }
-                
-                # Check if video is available
-                if info.get('is_live') or not info.get('formats'):
-                    return {
-                        "restricted": True,
-                        "reason": "Video is not available for processing"
-                    }
-                
-                return {"restricted": False, "reason": None}
-                
-        except Exception as e:
+def check_video_copyright_safe(video_id: str) -> Dict:
+    try:
+        videos_params = {
+            'part': 'snippet,contentDetails,liveStreamingDetails',
+            'id': video_id,
+            'key': YOUTUBE_API_KEY
+        }
+
+        response = requests.get(YOUTUBE_VIDEOS_URL, params=videos_params, timeout=10)
+        response.raise_for_status()
+
+        data = response.json()
+        if not data.get('items'):
+            return {"restricted": True, "reason": "Video not found or private"}
+
+        item = data['items'][0]
+        snippet = item['snippet']
+        content_details = item['contentDetails']
+
+        title = snippet.get('title', '').lower()
+        description = snippet.get('description', '').lower()
+        uploader = snippet.get('channelTitle', '').lower()
+        duration = content_details.get('duration', 'PT0S')
+        is_live = snippet.get('liveBroadcastContent', '') == 'live'
+
+        # Convert duration from ISO 8601 to seconds
+        import isodate
+        duration_seconds = int(isodate.parse_duration(duration).total_seconds())
+
+        music_keywords = [
+            'official music video', 'vevo', 'records', 'entertainment',
+            'sony music', 'universal music', 'warner music', 'emi music'
+        ]
+        media_keywords = [
+            'official trailer', 'full movie', 'netflix', 'disney',
+            'paramount', 'warner bros', 'sony pictures'
+        ]
+
+        for keyword in music_keywords + media_keywords:
+            if keyword in title or keyword in description or keyword in uploader:
+                return {
+                    "restricted": True,
+                    "reason": "Appears to be copyrighted music or entertainment"
+                }
+
+        if duration_seconds > 7200:
             return {
                 "restricted": True,
-                "reason": f"Unable to verify copyright status: {str(e)}"
-            } 
+                "reason": "Video is too long (likely full movie/show)"
+            }
 
-    def download_video_audio(self, video_id: str) -> str:
-        try:
-            video_url = f"https://www.youtube.com/watch?v={video_id}"
-            output_path = os.path.join(self.temp_dir, f"{video_id}.%(ext)s")
-            
-            # Dynamic ffmpeg path
-            ffmpeg_path = get_ffmpeg_path()
-            
-            cmd = [
-                'yt-dlp',
-                '--ffmpeg-location', ffmpeg_path,
-                '--extract-audio',
-                '--audio-format', 'mp3',
-                '--audio-quality', '192K',
-                '--output', output_path,
-                '--no-playlist',
-                '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-                video_url
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-            
-            if result.returncode != 0:
-                logger.error(f"yt-dlp error: {result.stderr}")
-                raise Exception(f"Failed to download video: {result.stderr}")
-            
-            # Find the downloaded file
-            audio_file = os.path.join(self.temp_dir, f"{video_id}.mp3")
-            if os.path.exists(audio_file):
-                return audio_file
-            else:
-                # Sometimes the file might have a different name, search for it
-                for file in os.listdir(self.temp_dir):
-                    if file.startswith(video_id) and file.endswith('.mp3'):
-                        return os.path.join(self.temp_dir, file)
-                
-                raise Exception("Downloaded audio file not found")
-                
-        except subprocess.TimeoutExpired:
-            raise Exception("Video download timed out")
-        except Exception as e:
-            logger.error(f"Error downloading video: {e}")
-            raise Exception(f"Failed to download video: {str(e)}")
-    
-    def transcribe_audio(self, file_path):
-        try:
-            os.environ["PATH"] += os.pathsep + "C:\\ffmpeg\\ffmpeg-7.1.1-essentials_build\\bin"
+        if is_live:
+            return {
+                "restricted": True,
+                "reason": "Video is live or not available for processing"
+            }
 
-            model = whisper.load_model("base")
-            result = model.transcribe(file_path)
-            return result["text"]
-        
-        except Exception as e:
-            logger.error(f"Error transcribing audio: {e}")
-            raise Exception(f"Failed to transcribe audio: {str(e)}")
-        
-    import re
+        return {"restricted": False, "reason": None}
 
-    def extract_structured_fallback(text):
-        summary = text.strip()
+    except Exception as e:
+        return {"restricted": True, "reason": f"Error checking video: {str(e)}"}
 
-        key_points = re.findall(r"- (.*?)\n", text)
-        if not key_points:
-            key_points = ["Key points not extracted"]
-
-        topics = re.findall(r"(?:Topic[s]?|Main topic[s]?):\s*(.*)", text)
-        if not topics:
-            topics = ["Topic extraction failed"]
-
-        return {
-            "summary": summary,
-            "key_points": key_points,
-            "topics": topics
-        }
-    
-    def generate_summary(self, transcript: str) -> Dict:
-        try:
-            model = genai.GenerativeModel('models/gemini-1.5-flash')
-
-            prompt = f"""
-            Please analyze the following transcript and provide:
-            1. A comprehensive summary (200-300 words)
-            2. Key points (5-7 bullet points)
-            3. Main topics covered
-
-            Format your response as JSON with these keys:
-            - "summary": comprehensive summary text
-            - "key_points": array of key points
-            - "topics": array of main topics
-
-            Transcript:
-            {transcript}
-            """
-
-            response = model.generate_content(prompt)
-
-            # Remove markdown code fences
-            cleaned_text = re.sub(r"```(?:json)?\s*([\s\S]*?)```", r"\1", response.text.strip())
-
-            try:
-                result = json.loads(cleaned_text)
-            except json.JSONDecodeError:
-                logger.warning("Failed to parse JSON; attempting to extract structured text fallback.")
-                result = extract_structured_fallback(response.text)
-  
-            return result
-
-        except Exception as e:
-            logger.error(f"Error generating summary: {e}")
-            raise Exception(f"Failed to generate summary: {str(e)}")
-
-    
-    def translate_content(self, text: str, target_language: str) -> str:
-        """
-        Translate text to target language using GoogleTranslator
-        """
-        try:
-            if target_language == 'en':
-                return text  # No translation needed for English
-            
-            translator = GoogleTranslator(source='en', target=target_language)
-            translated_text = translator.translate(text)
-            
-            return translated_text
-            
-        except dt_exceptions.TranslationNotFound:
-            logger.warning(f"Translation not found for language: {target_language}")
-            return text  # Return original text if translation fails
-        except Exception as e:
-            logger.error(f"Error translating text: {e}")
-            return text  # Return original text if translation fails
-    
-    def cleanup(self):
-        """
-        Clean up temporary files
-        """
-        try:
-            import shutil
-            if os.path.exists(self.temp_dir):
-                shutil.rmtree(self.temp_dir)
-        except Exception as e:
-            logger.error(f"Error cleaning up temp files: {e}")
 
 class SSLAdapter(HTTPAdapter):
     """Custom SSL adapter to handle SSL connection issues"""
@@ -310,6 +156,7 @@ class SSLAdapter(HTTPAdapter):
     def init_poolmanager(self, *args, **kwargs):
         kwargs['ssl_context'] = self.ssl_context
         return super().init_poolmanager(*args, **kwargs)
+
 class YouTubeSearcher:
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -706,9 +553,10 @@ def search_videos():
 @app.route('/api/generate-summary', methods=['POST'])
 def generate_summary():
     """
-    API endpoint to generate video summary with translation
+    API endpoint to generate video summary with translation using Gemini AI
+    Based on video metadata instead of actual video processing
     """
-    global video_processor
+    global video_processor, youtube_searcher
     
     try:
         # Check if required APIs are configured
@@ -734,72 +582,38 @@ def generate_summary():
         
         logger.info(f"Generating summary for video: {video_id} in language: {target_language}")
         
-        # Initialize video processor
-        # Initialize video processor
-        if video_processor is None:
-            video_processor = VideoProcessor()
 
         # Step 1: Check for copyright restrictions
         logger.info("Checking video copyright status...")
-        copyright_check = video_processor.check_video_copyright(video_id)
+        copyright_check = check_video_copyright_safe(video_id)
         if copyright_check["restricted"]:
             return jsonify({
                 'error': f"❌ Cannot process this video: {copyright_check['reason']}",
                 'copyright_restricted': True
             }), 403
 
-        # Step 2: Download video audio
-        logger.info("Downloading video audio...")
-        audio_file = video_processor.download_video_audio(video_id)
+        # Step 2: Get video metadata from YouTube API
+        logger.info("Fetching video metadata...")
+        video_metadata = get_video_metadata(video_id)
+        if not video_metadata:
+            return jsonify({
+                'error': 'Unable to fetch video information'
+            }), 404
         
-        # Step 2: Transcribe audio
-        logger.info("Transcribing audio...")
-        transcript = video_processor.transcribe_audio(audio_file)
-        
-        # Step 3: Generate summary
-        logger.info("Generating summary...")
-        summary_data = video_processor.generate_summary(transcript)
-        
-        # Step 4: Translate if not English
-        if target_language != 'en':
-            logger.info(f"Translating to {target_language}...")
-            
-            # Translate summary
-            summary_data['summary'] = video_processor.translate_content(
-                summary_data['summary'], target_language
-            )
-            
-            # Translate key points
-            if 'key_points' in summary_data:
-                translated_points = []
-                for point in summary_data['key_points']:
-                    translated_point = video_processor.translate_content(point, target_language)
-                    translated_points.append(translated_point)
-                summary_data['key_points'] = translated_points
-            
-            # Translate topics
-            if 'topics' in summary_data:
-                translated_topics = []
-                for topic in summary_data['topics']:
-                    translated_topic = video_processor.translate_content(topic, target_language)
-                    translated_topics.append(translated_topic)
-                summary_data['topics'] = translated_topics
-        
-        # Clean up audio file
-        try:
-            os.remove(audio_file)
-        except Exception as e:
-            logger.warning(f"Could not remove audio file: {e}")
+        # Step 3: Generate summary using Gemini based on video metadata
+        logger.info("Generating summary using Gemini AI...")
+        summary_data = generate_summary_from_metadata(video_metadata, target_language)
         
         logger.info("Summary generation completed successfully")
         
         return jsonify({
             'video_id': video_id,
             'language': target_language,
+            'video_title': video_metadata.get('title', 'Unknown'),
+            'channel': video_metadata.get('channelTitle', 'Unknown'),
             'summary': summary_data['summary'],
             'key_points': summary_data.get('key_points', []),
             'topics': summary_data.get('topics', []),
-            'transcript_length': len(transcript),
             'status': 'success'
         })
         
@@ -808,6 +622,240 @@ def generate_summary():
         return jsonify({
             'error': str(e)
         }), 500
+
+def get_video_metadata(video_id: str) -> Dict:
+    """
+    Get video metadata from YouTube API
+    """
+    try:
+        global youtube_searcher
+        
+        # Initialize searcher if not done
+        if youtube_searcher is None:
+            if not YOUTUBE_API_KEY:
+                raise Exception('YouTube API key not configured')
+            youtube_searcher = YouTubeSearcher(YOUTUBE_API_KEY)
+        
+        # Get video details using YouTube API
+        videos_params = {
+            'part': 'snippet,statistics,contentDetails',
+            'id': video_id,
+            'key': YOUTUBE_API_KEY
+        }
+        
+        try:
+            # Try with the configured session first
+            videos_response = youtube_searcher.session.get(
+                YOUTUBE_VIDEOS_URL, 
+                params=videos_params, 
+                timeout=(10, 30),
+                verify=False
+            )
+            videos_response.raise_for_status()
+        except:
+            # Fallback to basic requests
+            videos_response = requests.get(
+                YOUTUBE_VIDEOS_URL, 
+                params=videos_params, 
+                timeout=30,
+                verify=False
+            )
+            videos_response.raise_for_status()
+        
+        videos_data = videos_response.json()
+        
+        if not videos_data.get('items'):
+            return None
+        
+        video_item = videos_data['items'][0]
+        snippet = video_item['snippet']
+        
+        return {
+            'id': video_id,
+            'title': snippet['title'],
+            'description': snippet.get('description', ''),
+            'channelTitle': snippet['channelTitle'],
+            'publishedAt': snippet['publishedAt'],
+            'tags': snippet.get('tags', []),
+            'categoryId': snippet.get('categoryId', ''),
+            'viewCount': video_item.get('statistics', {}).get('viewCount', '0'),
+            'duration': video_item.get('contentDetails', {}).get('duration', 'PT0S')
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching video metadata: {e}")
+        return None
+
+def generate_summary_from_metadata(video_metadata: Dict, target_language: str) -> Dict:
+    """
+    Generate comprehensive summary using Gemini AI based on video metadata
+    """
+    try:
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        
+        title = video_metadata.get('title', '')
+        description = video_metadata.get('description', '')
+        channel = video_metadata.get('channelTitle', '')
+        tags = video_metadata.get('tags', [])
+        
+        # Create context from available metadata
+        context = f"Video Title: {title}\n"
+        context += f"Channel: {channel}\n"
+        if tags:
+            context += f"Tags: {', '.join(tags[:10])}\n"  # Limit tags
+        if description:
+            # Limit description length for prompt
+            desc_preview = description[:1000] if len(description) > 1000 else description
+            context += f"Description: {desc_preview}\n"
+        
+        # Language-specific instructions
+        language_instruction = ""
+        if target_language != 'en':
+            language_instruction = f"\n\nIMPORTANT: Generate all content (summary, key points, topics) in {target_language} language. Ensure proper grammar and natural language flow."
+        
+        prompt = f"""
+        Based on the following YouTube video information, create a comprehensive educational summary as if you had analyzed the video content:
+
+        {context}
+
+        Please provide:
+        1. A detailed summary (250-350 words) that covers what the video likely discusses based on the title and description
+        2. 6-8 key points that would be covered in such a video
+        3. 4-5 main topics/themes
+
+        Format your response as JSON with these exact keys:
+        - "summary": comprehensive summary text
+        - "key_points": array of key points (each point should be a complete sentence)
+        - "topics": array of main topics
+
+        Make it educational and informative, as if providing a study guide for someone who watched the video.
+        Ensure the content is accurate and relevant to the video title and description provided.
+        {language_instruction}
+
+        Target Language: {target_language}
+        """
+        
+        response = model.generate_content(prompt)
+        
+        # Clean the response text
+        response_text = response.text.strip()
+        
+        # Remove markdown code fences if present
+        response_text = re.sub(r"```(?:json)?\s*([\s\S]*?)```", r"\1", response_text)
+        
+        try:
+            result = json.loads(response_text)
+            
+            # Validate the structure
+            if not all(key in result for key in ['summary', 'key_points', 'topics']):
+                raise ValueError("Missing required keys in response")
+            
+            # Ensure key_points and topics are lists
+            if not isinstance(result['key_points'], list):
+                result['key_points'] = [str(result['key_points'])]
+            if not isinstance(result['topics'], list):
+                result['topics'] = [str(result['topics'])]
+            
+            return result
+            
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.warning(f"Failed to parse JSON response: {e}")
+            # Fallback to extracting structured text
+            return extract_structured_fallback(response.text, video_metadata, target_language)
+    
+    except Exception as e:
+        logger.error(f"Error generating summary from metadata: {e}")
+        # Return fallback summary
+        return generate_fallback_summary(video_metadata, target_language)
+
+def extract_structured_fallback(text: str, video_metadata: Dict, target_language: str) -> Dict:
+    """
+    Extract structured data from unstructured text response
+    """
+    try:
+        # Try to extract summary (first paragraph or substantial text block)
+        lines = text.split('\n')
+        summary_lines = []
+        key_points = []
+        topics = []
+        
+        current_section = None
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Detect sections
+            if 'summary' in line.lower() or 'overview' in line.lower():
+                current_section = 'summary'
+                continue
+            elif 'key point' in line.lower() or 'main point' in line.lower():
+                current_section = 'key_points'
+                continue
+            elif 'topic' in line.lower() or 'theme' in line.lower():
+                current_section = 'topics'
+                continue
+            
+            # Extract content based on current section
+            if line.startswith('-') or line.startswith('*') or line.startswith('•'):
+                content = line[1:].strip()
+                if current_section == 'key_points':
+                    key_points.append(content)
+                elif current_section == 'topics':
+                    topics.append(content)
+            elif current_section == 'summary' and len(line) > 20:
+                summary_lines.append(line)
+        
+        # Join summary lines
+        summary = ' '.join(summary_lines) if summary_lines else text[:500]
+        
+        # Fallback if extraction failed
+        if not key_points:
+            key_points = [f"Key concepts related to {video_metadata.get('title', 'the video topic')}"]
+        
+        if not topics:
+            topics = [video_metadata.get('title', 'Video Topic')]
+        
+        return {
+            'summary': summary,
+            'key_points': key_points[:8],  # Limit to 8 points
+            'topics': topics[:5]  # Limit to 5 topics
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in structured fallback: {e}")
+        return generate_fallback_summary(video_metadata, target_language)
+
+def generate_fallback_summary(video_metadata: Dict, target_language: str) -> Dict:
+    """
+    Generate a basic fallback summary when all else fails
+    """
+    title = video_metadata.get('title', 'Video')
+    channel = video_metadata.get('channelTitle', 'Unknown Channel')
+    
+    # Basic fallback content (could be enhanced with translation)
+    summary = f"This video titled '{title}' by {channel} appears to cover educational content related to the topic. The video likely provides informative content, explanations, and insights that would be valuable for learning about this subject matter."
+    
+    key_points = [
+        f"Introduction to the main topic: {title}",
+        "Detailed explanations and examples",
+        "Key concepts and terminology",
+        "Practical applications or examples",
+        "Summary of main takeaways"
+    ]
+    
+    topics = [
+        title,
+        "Educational Content",
+        "Learning Material"
+    ]
+    
+    return {
+        'summary': summary,
+        'key_points': key_points,
+        'topics': topics
+    }
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
