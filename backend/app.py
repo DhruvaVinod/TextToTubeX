@@ -28,6 +28,8 @@ from urllib3.util import connection
 import socket
 from werkzeug.utils import secure_filename
 import sys
+from gtts import gTTS
+from flask import send_file
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -36,7 +38,7 @@ app = Flask(__name__)
 @app.after_request
 def after_request(response):
     # Allow specific origin (replace with your frontend URL)
-    response.headers.add('Access-Control-Allow-Origin',  'https://deplyment-462519.web.app')
+    response.headers.add('Access-Control-Allow-Origin',  'http://localhost:3000')
     
     # Allow methods
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
@@ -1595,6 +1597,32 @@ Explanation: {explanation}"""
     except Exception as e:
         logger.error(f"Error generating YouTube topic: {e}")
         return jsonify({'error': str(e)}), 500
+    
+from gtts import gTTS
+from flask import send_file
+
+@app.route('/api/generate-audio', methods=['POST'])
+def generate_audio():
+    try:
+        data = request.get_json()
+        text = data.get('text')
+        language_code = data.get('language_code')
+
+        if not text or not language_code:
+            return jsonify({'error': 'Text and language_code are required'}), 400
+
+        tts = gTTS(text=text, lang=language_code)
+        filename = f"audio_{datetime.now().timestamp()}.mp3"
+        filepath = os.path.join("temp_audios", filename)
+
+        os.makedirs("temp_audios", exist_ok=True)
+        tts.save(filepath)
+
+        return send_file(filepath, mimetype="audio/mpeg", as_attachment=False)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 @app.errorhandler(500)
 def handle_500(e):

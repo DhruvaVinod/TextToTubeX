@@ -84,7 +84,7 @@ const Quiz = () => {
 
   const loadAvailableLanguages = async () => {
     try {
-      const response = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/supported-languages');
+      const response = await fetch('https://your-app-136108111450.us-central1.run.app/api/supported-languages');
       const data = await response.json();
       setAvailableLanguages(data.languages || ['English', 'Spanish', 'French', 'German', 'Italian', 'Portuguese', 'Arabic', 'Chinese', 'Japanese', 'Korean']);
       setSelectedLanguage(data.default || 'English');
@@ -135,7 +135,7 @@ const Quiz = () => {
       const imageData = canvas.toDataURL('image/jpeg', 0.8);
       
       // Send to backend for OCR
-      const response = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/camera-capture', {
+      const response = await fetch('https://your-app-136108111450.us-central1.run.app/api/camera-capture', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -188,7 +188,7 @@ const Quiz = () => {
     const formData = new FormData();
     formData.append('image', file);
     
-    fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/upload-image', {
+    fetch('https://your-app-136108111450.us-central1.run.app/api/upload-image', {
       method: 'POST',
       body: formData,
     })
@@ -244,7 +244,7 @@ const Quiz = () => {
         requestBody.document_content = documentContent.trim();
       }
 
-      const response = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/generate-quiz', {
+      const response = await fetch('https://your-app-136108111450.us-central1.run.app/api/generate-quiz', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

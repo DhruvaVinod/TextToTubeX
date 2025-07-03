@@ -13,6 +13,12 @@ const DiagramExplainer = ({ onBack, onSearchYouTube }) => {
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [isGeneratingTopic, setIsGeneratingTopic] = useState(false);
+  const [currentLanguage, setCurrentLanguage] = useState('en'); // Track current language
+  
+  // Audio-related states
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [audioError, setAudioError] = useState(null);
 
   const languages = {
     "Hindi": "hi",
@@ -27,6 +33,58 @@ const DiagramExplainer = ({ onBack, onSearchYouTube }) => {
     "Urdu": "ur",
     "Odia": "or",
     "Assamese": "as"
+  };
+
+  // Audio generation functions
+  const fetchAudioUrl = async (text, languageCode) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/generate-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, language_code: languageCode })
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch audio');
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      return {
+        url: audioUrl,
+        type: audioBlob.type
+      };
+    } catch (error) {
+      console.error('Audio generation error:', error);
+      return null;
+    }
+  };
+
+  const handleGenerateAudio = async () => {
+    const textToConvert = translatedExplanation || explanation;
+    const languageCode = currentLanguage;
+    
+    if (!textToConvert) {
+      setAudioError('No explanation available to convert to audio');
+      return;
+    }
+
+    try {
+      setIsGeneratingAudio(true);
+      setAudioError(null);
+      
+      const audioResult = await fetchAudioUrl(textToConvert, languageCode);
+      
+      if (audioResult) {
+        setAudioUrl(audioResult.url);
+      } else {
+        setAudioError('Failed to generate audio. Please try again.');
+      }
+    } catch (error) {
+      console.error('Audio generation error:', error);
+      setAudioError('Failed to generate audio. Please try again.');
+    } finally {
+      setIsGeneratingAudio(false);
+    }
   };
 
   const formatText = (text) => {
@@ -77,16 +135,36 @@ const DiagramExplainer = ({ onBack, onSearchYouTube }) => {
     });
   };
 
+  const cleanTextForTranslation = (text) => {
+    if (!text) return '';
+    
+    // Remove markdown formatting before translation
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold markers
+      .replace(/\*(.*?)\*/g, '$1') // Remove italic markers
+      .replace(/#{1,6}\s*(.*?)(?:\n|$)/g, '$1\n') // Remove header markers
+      .replace(/^\s*[-*+]\s+/gm, '') // Remove bullet point markers
+      .replace(/^\s*\d+\.\s+/gm, '') // Remove numbered list markers
+      .trim();
+  };
+
   const translateText = async (text, targetLanguage) => {
     setIsTranslating(true);
     
     try {
-      const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${targetLanguage}&dt=t&q=${encodeURIComponent(text)}`);
+      // Clean the text before translation to avoid translating markdown
+      const cleanedText = cleanTextForTranslation(text);
+      
+      const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${targetLanguage}&dt=t&q=${encodeURIComponent(cleanedText)}`);
       const data = await response.json();
       
       if (data && data[0]) {
         const translatedText = data[0].map(item => item[0]).join('');
         setTranslatedExplanation(translatedText);
+        setCurrentLanguage(targetLanguage);
+        // Reset audio when language changes
+        setAudioUrl(null);
+        setAudioError(null);
       }
     } catch (error) {
       console.error('Translation error:', error);
@@ -151,7 +229,7 @@ const DiagramExplainer = ({ onBack, onSearchYouTube }) => {
     formData.append('image', selectedImage);
 
     try {
-      const res = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/analyze-diagram', { 
+      const res = await fetch('http://localhost:5000/api/analyze-diagram', { 
         method: 'POST', 
         body: formData 
       });
@@ -159,8 +237,11 @@ const DiagramExplainer = ({ onBack, onSearchYouTube }) => {
       if (!res.ok) throw new Error(data.error || 'Analysis failed');
       setExplanation(data.explanation);
       setShowResults(true);
-      // Clear any previous translations
+      // Clear any previous translations and audio
       setTranslatedExplanation('');
+      setCurrentLanguage('en');
+      setAudioUrl(null);
+      setAudioError(null);
     } catch (err) {
       alert('Error: ' + err.message);
     } finally {
@@ -175,12 +256,23 @@ const DiagramExplainer = ({ onBack, onSearchYouTube }) => {
     setTranslatedExplanation('');
     setShowResults(false);
     setShowLanguageDropdown(false);
+    setCurrentLanguage('en');
+    setAudioUrl(null);
+    setAudioError(null);
+  };
+
+  const showOriginalExplanation = () => {
+    setTranslatedExplanation('');
+    setCurrentLanguage('en');
+    // Reset audio when returning to original
+    setAudioUrl(null);
+    setAudioError(null);
   };
 
   // Generate YouTube search topic using Gemini API
   const generateYouTubeTopic = async (explanation) => {
     try {
-      const response = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/generate-youtube-topic', {
+      const response = await fetch('http://localhost:5000/api/generate-youtube-topic', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -272,6 +364,15 @@ const DiagramExplainer = ({ onBack, onSearchYouTube }) => {
     }
   };
 
+  // Clean up audio URL when component unmounts
+  useEffect(() => {
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -361,6 +462,51 @@ const DiagramExplainer = ({ onBack, onSearchYouTube }) => {
               <div className="result-content">
                 {translatedExplanation ? formatText(translatedExplanation) : formatText(explanation)}
               </div>
+              
+              {/* Audio Section */}
+              <div className="audio-section">
+                {!audioUrl && !isGeneratingAudio && (
+                  <button 
+                    className="generate-audio-btn" 
+                    onClick={handleGenerateAudio}
+                    disabled={!(translatedExplanation || explanation)}
+                  >
+                    🔊 
+                  </button>
+                )}
+                
+                {isGeneratingAudio && (
+                  <div className="audio-loading">
+                    <div className="loading-spinner"></div>
+                    <span>.......</span>
+                  </div>
+                )}
+                
+                {audioError && (
+                  <div className="audio-error">
+                    <span className="error-icon">⚠️</span>
+                    <span>{audioError}</span>
+                    <button onClick={handleGenerateAudio} className="retry-btn">Try Again</button>
+                  </div>
+                )}
+                
+                {audioUrl && (
+                  <div className="audio-player-container">
+                    <h4>🎧 Listen to Explanation</h4>
+                    <audio controls src={audioUrl} className="audio-player">
+                      Your browser does not support the audio element.
+                    </audio>
+                    <button 
+                      className="regenerate-audio-btn" 
+                      onClick={handleGenerateAudio}
+                      disabled={isGeneratingAudio}
+                    >
+                      🔄 Regenerate Audio
+                    </button>
+                  </div>
+                )}
+              </div>
+
               <div className="translation-controls">
                 <div className="language-dropdown">
                   <button 
@@ -387,7 +533,7 @@ const DiagramExplainer = ({ onBack, onSearchYouTube }) => {
                 {translatedExplanation && (
                   <button 
                     className="secondary-btn"
-                    onClick={() => setTranslatedExplanation('')}
+                    onClick={showOriginalExplanation}
                   >
                     🔄 Show Original
                   </button>

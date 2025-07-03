@@ -1,16 +1,47 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom'; // Add this import
+import { useNavigate } from 'react-router-dom';
 import './PreviousSummaries.css';
 
 const PreviousSummaries = ({ onBack }) => {
-  const navigate = useNavigate(); // Add this hook
+  const navigate = useNavigate();
   const [savedSummaries, setSavedSummaries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedSummary, setSelectedSummary] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [audioUrls, setAudioUrls] = useState({}); // Store created audio URLs
 
-  // Handle back navigation - use onBack prop if available, otherwise navigate to home
+  // Helper function to create audio URL from base64 data
+  const createAudioUrl = (audioData, audioType) => {
+    if (!audioData || !audioType) {
+      console.log('Missing audio data or type:', { audioData: !!audioData, audioType });
+      return null;
+    }
+    
+    try {
+      // Remove data URL prefix if present
+      const base64Data = audioData.includes(',') ? audioData.split(',')[1] : audioData;
+      
+      // Convert base64 to blob
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: audioType });
+      
+      // Create object URL
+      const url = URL.createObjectURL(blob);
+      console.log('Created audio URL:', url, 'from type:', audioType);
+      return url;
+    } catch (error) {
+      console.error('Error creating audio URL:', error);
+      return null;
+    }
+  };
+
+  // Handle back navigation
   const handleBack = () => {
     if (onBack) {
       onBack();
@@ -20,57 +51,93 @@ const PreviousSummaries = ({ onBack }) => {
   };
 
   const loadSavedSummaries = () => {
-  try {
-    const user = localStorage.getItem('user');
-    if (user) {
-      const savedSummaries = JSON.parse(localStorage.getItem('savedSummaries') || '[]');
-      const userSummaries = savedSummaries.filter(summary => summary.userId === user);
-      setSavedSummaries(userSummaries); // Use setSavedSummaries instead of setSummaries
-    } else {
-      setSavedSummaries([]); // Set empty array if no user
+    try {
+      const user = localStorage.getItem('user');
+      if (user) {
+        const savedSummaries = JSON.parse(localStorage.getItem('savedSummaries') || '[]');
+        const userSummaries = savedSummaries.filter(summary => summary.userId === user);
+        
+        // Process summaries and create audio URLs
+        const processedSummaries = userSummaries.map(summary => {
+          if (summary.audioData && summary.audioType) {
+            const audioUrl = createAudioUrl(summary.audioData, summary.audioType);
+            console.log('Created audio URL for summary:', summary.id, audioUrl); // Debug log
+            return { ...summary, audioUrl };
+          }
+          return summary;
+        });
+        
+        setSavedSummaries(processedSummaries);
+        
+        // Store audio URLs for cleanup
+        const urls = {};
+        processedSummaries.forEach(summary => {
+          if (summary.audioUrl) {
+            urls[summary.id] = summary.audioUrl;
+          }
+        });
+        setAudioUrls(urls);
+      } else {
+        setSavedSummaries([]);
+      }
+    } catch (error) {
+      console.error('Error loading summaries:', error);
+      setError('Failed to load summaries');
+    } finally {
+      setIsLoading(false);
     }
-  } catch (error) {
-    console.error('Error loading summaries:', error);
-    setError('Failed to load summaries');
-  } finally {
-    setIsLoading(false); // Always set loading to false
-  }
-};
+  };
 
   useEffect(() => {
-  loadSavedSummaries();
-}, []);
-
+    loadSavedSummaries();
+    
+    // Cleanup function to revoke object URLs when component unmounts
+    return () => {
+      Object.values(audioUrls).forEach(url => {
+        if (url) URL.revokeObjectURL(url);
+      });
+    };
+  }, []);
 
   const handleDeleteSummary = (summaryId) => {
-  try {
-    const user = localStorage.getItem('user');
-    if (!user) {
-      alert('Please sign in to delete summaries.');
-      return;
-    }
+    try {
+      const user = localStorage.getItem('user');
+      if (!user) {
+        alert('Please sign in to delete summaries.');
+        return;
+      }
 
-    // Get saved summaries from localStorage
-    const savedSummaries = JSON.parse(localStorage.getItem('savedSummaries') || '[]');
-    
-    // Filter out the summary to delete
-    const updatedSummaries = savedSummaries.filter(summary => summary.id !== summaryId);
-    
-    // Save back to localStorage
-    localStorage.setItem('savedSummaries', JSON.stringify(updatedSummaries));
-    
-    // Update local state
-    setSavedSummaries(prev => prev.filter(summary => summary.id !== summaryId));
-    setShowDeleteConfirm(null);
-    
-    if (selectedSummary && selectedSummary.id === summaryId) {
-      setSelectedSummary(null);
+      // Clean up audio URL if it exists
+      if (audioUrls[summaryId]) {
+        URL.revokeObjectURL(audioUrls[summaryId]);
+        setAudioUrls(prev => {
+          const newUrls = { ...prev };
+          delete newUrls[summaryId];
+          return newUrls;
+        });
+      }
+
+      // Get saved summaries from localStorage
+      const savedSummaries = JSON.parse(localStorage.getItem('savedSummaries') || '[]');
+      
+      // Filter out the summary to delete
+      const updatedSummaries = savedSummaries.filter(summary => summary.id !== summaryId);
+      
+      // Save back to localStorage
+      localStorage.setItem('savedSummaries', JSON.stringify(updatedSummaries));
+      
+      // Update local state
+      setSavedSummaries(prev => prev.filter(summary => summary.id !== summaryId));
+      setShowDeleteConfirm(null);
+      
+      if (selectedSummary && selectedSummary.id === summaryId) {
+        setSelectedSummary(null);
+      }
+    } catch (error) {
+      console.error('Error deleting summary:', error);
+      alert('Failed to delete summary. Please try again.');
     }
-  } catch (error) {
-    console.error('Error deleting summary:', error);
-    alert('Failed to delete summary. Please try again.');
-  }
-};
+  };
 
   const handleDownloadSummary = (summary) => {
     const element = document.createElement('a');
@@ -80,6 +147,7 @@ const PreviousSummaries = ({ onBack }) => {
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
+    URL.revokeObjectURL(element.href); // Clean up
   };
 
   const formatDate = (dateString) => {
@@ -214,6 +282,19 @@ const PreviousSummaries = ({ onBack }) => {
               {selectedSummary.content}
             </div>
             
+            {(selectedSummary.audioUrl || (selectedSummary.audioData && selectedSummary.audioType)) && (
+              <div className="audio-player">
+                <h4>🔊 Audio Summary:</h4>
+                <audio 
+                  controls 
+                  src={selectedSummary.audioUrl || createAudioUrl(selectedSummary.audioData, selectedSummary.audioType)}
+                  onError={(e) => console.error('Audio playback error:', e)}
+                >
+                  Your browser does not support the audio element.
+                </audio>
+              </div>
+            )}
+
             {selectedSummary.keyPoints && selectedSummary.keyPoints.length > 0 && (
               <div className="key-points">
                 <h4>Key Points:</h4>
@@ -288,6 +369,9 @@ const PreviousSummaries = ({ onBack }) => {
                   <div className="language-badge">
                     {formatLanguage(summary.language)}
                   </div>
+                  {(summary.hasAudio || summary.audioData) && (
+                    <div className="audio-badge">🔊</div>
+                  )}
                 </div>
                 
                 <div className="summary-info">
@@ -298,6 +382,19 @@ const PreviousSummaries = ({ onBack }) => {
                   <p className="summary-preview">
                     {summary.content.substring(0, 120)}...
                   </p>
+                  
+                  {(summary.audioUrl || (summary.audioData && summary.audioType)) && (
+                    <div className="audio-card">
+                      <audio 
+                        controls 
+                        src={summary.audioUrl || createAudioUrl(summary.audioData, summary.audioType)}
+                        onError={(e) => console.error('Audio playback error for summary:', summary.id, e)}
+                      >
+                        Your browser does not support the audio element.
+                      </audio>
+                    </div>
+                  )}
+                  
                   <div className="summary-meta">
                     <span>{summary.videoDuration}</span>
                     <span>{formatDate(summary.createdAt)}</span>

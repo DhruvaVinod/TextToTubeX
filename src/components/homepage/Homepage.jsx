@@ -60,7 +60,7 @@ const Homepage = () => {
       
       const imageData = canvas.toDataURL('image/jpeg', 0.8);
       
-      const response = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/camera-capture', {
+      const response = await fetch('http://localhost:5000/api/camera-capture', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -127,7 +127,7 @@ const Homepage = () => {
     const formData = new FormData();
     formData.append('image', file);
     
-    fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/upload-image', {
+    fetch('http://localhost:5000/api/upload-image', {
       method: 'POST',
       body: formData,
     })

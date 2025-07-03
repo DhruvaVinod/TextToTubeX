@@ -52,6 +52,23 @@ const StudyPlanner = ({ onBack }) => {
     'Bengali', 'Gujarati', 'Marathi', 'Punjabi', 'Urdu', 'Odia', 'Assamese',
   ];
 
+  // Language code mapping for audio generation
+  const languageCodeMap = {
+    'English': 'en',
+    'Hindi': 'hi',
+    'Tamil': 'ta',
+    'Telugu': 'te',
+    'Kannada': 'kn',
+    'Malayalam': 'ml',
+    'Bengali': 'bn',
+    'Gujarati': 'gu',
+    'Marathi': 'mr',
+    'Punjabi': 'pa',
+    'Urdu': 'ur',
+    'Odia': 'or',
+    'Assamese': 'as'
+  };
+
   const difficulties = ['Beginner', 'Intermediate', 'Advanced', 'Expert'];
 
   useEffect(() => {
@@ -200,6 +217,8 @@ const StudyPlanner = ({ onBack }) => {
             calendar: calendarInfo,
             topic,
             difficulty,
+            language, // Pass the selected language
+            languageCode: languageCodeMap[language], // Pass the language code for audio
             progress: { completed: 0, total: totalDays }
           }
         });
@@ -323,7 +342,7 @@ const StudyPlanner = ({ onBack }) => {
               <div className="form-group">
                 <div class="form-section">
                   <h3 class="form-section-title">
-                  <label>🌍 Language</label></h3>
+                  <label>🌍 Language *</label></h3>
                 <select 
                   name="language" 
                   value={formData.language} 
@@ -334,6 +353,9 @@ const StudyPlanner = ({ onBack }) => {
                     <option key={lang} value={lang}>{lang}</option>
                   ))}
                 </select>
+                <div className="language-note">
+                  <small>📢 Study plan and audio will be generated in this language</small>
+                </div>
               </div>
               </div>
               
@@ -393,6 +415,10 @@ const StudyPlanner = ({ onBack }) => {
                   <div className="stat-item">
                     <div className="stat-value">{formData.difficulty}</div>
                     <div className="stat-label">Level</div>
+                  </div>
+                  <div className="stat-item">
+                    <div className="stat-value">{formData.language}</div>
+                    <div className="stat-label">Language</div>
                   </div>
                 </div>
               </div>
