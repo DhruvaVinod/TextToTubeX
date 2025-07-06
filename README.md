@@ -1,10 +1,8 @@
 # 🎬 TextToTubeX 🚀  
-*Turn your text into tailored YouTube experiences.*
 
-**TextToTubeX** is a revamped version of our earlier project **TextToTube**.  
+With a fresh new UI, smoother flow, and deeper personalization, **TextToTubeX** is your smart gateway to YouTube discovery. 
+
 Give us a sentence, topic, or idea—and we'll fetch the most relevant YouTube videos to match it!
-
-With a fresh new UI, smoother flow, and deeper personalization, it's your smart gateway to YouTube discovery.
 
 👉 **Live Demo:** [https://deplyment-462519.web.app/](https://deplyment-462519.web.app/)
 
@@ -17,7 +15,6 @@ With a fresh new UI, smoother flow, and deeper personalization, it's your smart 
 - 👤 **User Authentication** – Secure Google login/signup with Firebase Auth.
 - ☁️ **Cloud Firestore Integration** – Save user history & personalize suggestions.
 - 🖥 **Responsive UI** – Built with ReactJS + TailwindCSS for clean, adaptive design.
-- ⚡ **Hackathon Ready** – Quick to set up, fun to demo, easy to extend.
 
 ---
 
@@ -118,6 +115,15 @@ firebase_admin.initialize_app(cred)
 
 ---
 
+## 🔑 API Keys Required
+To use all features of TextToTubeX, you'll need to set up the following API keys:
+
+- **Gemini API Key** – Used for AI-generated summaries and quizzes.
+  - You'll need a **Gemini Pro** account to access advanced features.
+- **YouTube Data API Key** – Used to fetch relevant YouTube videos based on topics.
+
+We recommend storing these keys securely using `.env` files or your deployment environment's secrets manager.
+
 ## 📁 Folder Structure
 
 ~~~
@@ -127,32 +133,32 @@ TextToTubeX/
 ├── public/               # Static files
 ├── firebase.json         # Firebase project config
 ├── .firebaserc           # Firebase project alias
+├── .env                  # For api keys 
 └── README.md             # This file!
+
 ~~~
-
----
-
-## 🤝 Contributing
-
-Got a cool feature idea? Fork the repo, build something awesome, and send us a pull request!
-
-~~~bash
-git checkout -b feature/yourFeature
-git commit -m "Add your feature"
-git push origin feature/yourFeature
-~~~
-
-Then open a pull request 🚀
 
 ---
 
 ## 💡 Future Improvements
 
-- 🧠 NLP-powered intent detection
-- 📝 Save user history and sessions
-- 📈 Admin dashboard with insights
-- 🎵 Auto-generated playlists
-- 📚 Student mode: Map textbook content to relevant videos
+🤝 Collaborative Study Groups
+Enable users to form or join groups, share notes, discuss quizzes, and collaborate on study plans.
+
+🎙️ Voice Input & Output
+Allow voice-based input and audio summaries/quizzes to improve accessibility.
+
+🧩 Customizable Quiz Types
+Support formats like fill-in-the-blanks, drag-and-drop, and flashcards.
+
+📊 Study Suggestions
+Analyze quiz performance to recommend topics users should focus on.
+
+👩‍🏫 Teacher Dashboard
+Let educators track student usage, content generated, and quiz performance.
+
+📄 PDF Upload Support
+Enable uploading and processing of PDF files in addition to images.
 
 ---
 

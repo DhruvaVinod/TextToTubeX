@@ -1,15 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import './StudyPlanner.css';
 
 const StudyResult = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { plan, calendar, topic, difficulty, progress } = location.state || {};
+  const { plan, calendar, topic, difficulty, language, languageCode, progress } = location.state || {};
+  const audioRef = useRef(null);
   
   const [currentProgress, setCurrentProgress] = useState(progress?.completed || 0);
   const [completedDays, setCompletedDays] = useState(new Set());
-  const [viewMode, setViewMode] = useState('combined'); // 'plan', 'calendar', 'combined'
+  const [viewMode, setViewMode] = useState('combined');
   const [showCelebration, setShowCelebration] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [estimatedCompletion, setEstimatedCompletion] = useState('');
@@ -21,6 +22,14 @@ const StudyResult = () => {
   const [selectedDay, setSelectedDay] = useState(null);
   const [isSaved, setIsSaved] = useState(false);
   const [savedPlanId, setSavedPlanId] = useState(null);
+  
+  // Audio states - using the language and languageCode from StudyPlanner
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
+  const [audioError, setAudioError] = useState(null);
+  const [audioData, setAudioData] = useState(null); // Base64 audio data
+  const [audioType, setAudioType] = useState(null); // Audio MIME type
+  
   const [motivationalQuotes] = useState([
     "🌟 Every expert was once a beginner!",
     "🚀 Progress, not perfection!",
@@ -29,6 +38,125 @@ const StudyResult = () => {
     "✨ Consistency is the key to mastery!"
   ]);
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
+
+  // Helper functions
+  const blobToBase64 = (blob) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const base64ToUrl = (base64Data) => {
+    try {
+      const response = fetch(base64Data);
+      return response.then(res => res.blob()).then(blob => URL.createObjectURL(blob));
+    } catch (error) {
+      console.error('Error converting base64 to URL:', error);
+      return null;
+    }
+  };
+
+  // Audio generation function using the language from StudyPlanner
+  const fetchAudioUrl = async (text, languageCode) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/generate-audio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, language_code: languageCode })
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch audio');
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      
+      // Convert blob to base64 for storage
+      const audioBase64 = await blobToBase64(audioBlob);
+      
+      return {
+        url: audioUrl,
+        data: audioBase64,
+        type: audioBlob.type
+      };
+    } catch (error) {
+      console.error('Audio generation error:', error);
+      return null;
+    }
+  };
+
+  // Clean text for audio generation
+  const cleanTextForAudio = (text) => {
+    return text
+      .replace(/<[^>]*>/g, '')   // Remove HTML tags
+      .replace(/\*/g, '')        // Remove asterisks
+      .replace(/\n\s*\n/g, '\n') // Remove empty newlines
+      .replace(/\s+/g, ' ')      // Remove extra spaces
+      .trim();
+  };
+
+  // Handle audio generation using the language from StudyPlanner
+  const handleGenerateAudio = async () => {
+    if (!plan) {
+      setAudioError('No study plan available to convert to audio');
+      return;
+    }
+
+    if (!languageCode) {
+      setAudioError('Language not specified for audio generation');
+      return;
+    }
+
+    try {
+      setIsGeneratingAudio(true);
+      setAudioError(null);
+      
+      // Clean the plan text for audio generation
+      const cleanText = cleanTextForAudio(plan);
+      
+      const audioResult = await fetchAudioUrl(
+        cleanText,
+        languageCode // Use the language code passed from StudyPlanner
+      );
+      
+      if (audioResult) {
+        setAudioUrl(audioResult.url);
+        setAudioData(audioResult.data);
+        setAudioType(audioResult.type);
+        
+        // Auto-save if plan is already saved
+        if (isSaved && savedPlanId) {
+          updateSavedPlan();
+        }
+      } else {
+        setAudioError('Failed to generate audio. Please try again.');
+      }
+    } catch (error) {
+      console.error('Audio generation error:', error);
+      setAudioError('Failed to generate audio. Please try again.');
+    } finally {
+      setIsGeneratingAudio(false);
+    }
+  };
+
+  // Clean up audio URL when component unmounts
+  useEffect(() => {
+    return () => {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+    };
+  }, [audioUrl]);
+
+  // Reset audio when plan changes
+  useEffect(() => {
+    setAudioUrl(null);
+    setAudioData(null);
+    setAudioType(null);
+    setAudioError(null);
+  }, [plan]);
 
   useEffect(() => {
     if (calendar) {
@@ -44,7 +172,6 @@ const StudyResult = () => {
       setEstimatedCompletion(endDate.toLocaleDateString('en-US', options));
     }
 
-    // Check if this plan is already saved and load its data
     checkExistingPlan();
   }, [calendar, topic, difficulty]);
 
@@ -55,12 +182,12 @@ const StudyResult = () => {
     return () => clearInterval(quoteInterval);
   }, [motivationalQuotes.length]);
 
-  // Auto-save progress changes
+  // Auto-save progress changes including audio data
   useEffect(() => {
     if (isSaved && savedPlanId) {
       updateSavedPlan();
     }
-  }, [currentProgress, completedDays, dayNotes, studyStreak]);
+  }, [currentProgress, completedDays, dayNotes, studyStreak, audioData]);
 
   const checkExistingPlan = () => {
     const user = localStorage.getItem('user');
@@ -81,6 +208,18 @@ const StudyResult = () => {
       setCompletedDays(new Set(existingPlan.completedDays || []));
       setDayNotes(existingPlan.dayNotes || {});
       setStudyStreak(existingPlan.studyStreak || 0);
+      
+      // Load saved audio data if available
+      if (existingPlan.audioData) {
+        setAudioData(existingPlan.audioData);
+        setAudioType(existingPlan.audioType);
+        // Convert base64 back to URL for playback
+        base64ToUrl(existingPlan.audioData).then(url => {
+          if (url) {
+            setAudioUrl(url);
+          }
+        });
+      }
     }
   };
 
@@ -95,6 +234,9 @@ const StudyResult = () => {
         completedDays: Array.from(completedDays),
         dayNotes,
         studyStreak,
+        audioData,
+        audioType,
+        audioLanguage: languageCode, // Save the language code
         lastUpdated: new Date().toISOString()
       };
       
@@ -168,14 +310,14 @@ const StudyResult = () => {
   };
 
   const copyToClipboard = () => {
-    const shareText = `🎓 My ${topic} Study Plan\n📅 ${calendar?.totalDays} days\n⏰ ${calendar?.dailyHours} hours/day\n🎯 ${difficulty} level\n\nGenerated with AI Study Planner ✨`;
+    const shareText = `🎓 My ${topic} Study Plan\n📅 ${calendar?.totalDays} days\n⏰ ${calendar?.dailyHours} hours/day\n🎯 ${difficulty} level\n🌍 Language: ${language}\n\nGenerated with AI Study Planner ✨`;
     navigator.clipboard.writeText(shareText);
     alert('Study plan details copied to clipboard!');
     setShowShareModal(false);
   };
 
   const downloadPlan = () => {
-    const planText = plan.replace(/<[^>]*>/g, ''); // Remove HTML tags
+    const planText = plan.replace(/<[^>]*>/g, '');
     const element = document.createElement('a');
     const file = new Blob([planText], { type: 'text/plain' });
     element.href = URL.createObjectURL(file);
@@ -190,12 +332,11 @@ const StudyResult = () => {
 
     if (!user) {
       alert('Please sign in to save your study plan.');
-      navigate('/'); // Redirects to home to sign in
+      navigate('/');
       return;
     }
 
     if (isSaved) {
-      // Plan is already saved, just update progress
       updateSavedPlan();
       setShowCelebration(true);
       setTimeout(() => setShowCelebration(false), 2000);
@@ -206,6 +347,7 @@ const StudyResult = () => {
       id: Date.now(),
       topic,
       difficulty,
+      language, // Save the language name
       plan,
       calendar,
       progress: { completed: currentProgress, total: calendar?.totalDays || 0 },
@@ -214,7 +356,12 @@ const StudyResult = () => {
       createdAt: new Date().toISOString(),
       lastUpdated: new Date().toISOString(),
       studyStreak,
-      totalStudyTime
+      totalStudyTime,
+      // Audio data
+      audioData: audioData, // Base64 encoded audio
+      audioType: audioType, // MIME type for proper playback
+      audioLanguage: languageCode, // Save the language code
+      hasAudio: !!audioData  // Flag to indicate if audio is available
     };
 
     const savedPlans = JSON.parse(localStorage.getItem('studyPlans') || '[]');
@@ -224,11 +371,9 @@ const StudyResult = () => {
     setIsSaved(true);
     setSavedPlanId(studyPlanData.id);
     
-    // Show success message
     setShowCelebration(true);
     setTimeout(() => {
       setShowCelebration(false);
-      // Show navigation hint
       setTimeout(() => {
         if (window.confirm('Study plan saved successfully! Would you like to view all your saved plans?')) {
           navigate('/my-study-plans');
@@ -279,6 +424,7 @@ const StudyResult = () => {
             <span className="title-emoji">📖</span>
             Your Study Journey: "{topic}"
             <span className="difficulty-badge">{difficulty}</span>
+            <span className="language-badge">🌍 {language}</span>
             {isSaved && <span className="saved-indicator">💾 Saved</span>}
           </h1>
         </div>
@@ -292,6 +438,55 @@ const StudyResult = () => {
             <div className="motivation-text">
               {motivationalQuotes[currentQuoteIndex]}
             </div>
+          </div>
+        </div>
+
+        {/* Audio Section - using the language from StudyPlanner */}
+        <div className="audio-section">
+          <div className="audio-controls">
+            <div className="audio-info">
+            </div>
+            
+            {!audioUrl && !isGeneratingAudio && (
+              <button 
+                className="generate-audio-btn" 
+                onClick={handleGenerateAudio}
+                disabled={!plan || !languageCode}
+              >
+                🔊 
+              </button>
+            )}
+            
+            {isGeneratingAudio && (
+              <div className="audio-loading">
+                <div className="loading-spinner"></div>
+                <span>...........</span>
+              </div>
+            )}
+            
+            {audioError && (
+              <div className="audio-error">
+                <span className="error-icon">⚠️</span>
+                <span>{audioError}</span>
+                <button onClick={handleGenerateAudio} className="retry-btn">Try Again</button>
+              </div>
+            )}
+            
+            {audioUrl && (
+              <div className="audio-player-container">
+                <h4>🎧 Study Plan Audio ({language})</h4>
+                <audio controls src={audioUrl} className="audio-player">
+                  Your browser does not support the audio element.
+                </audio>
+                <button 
+                  className="regenerate-audio-btn" 
+                  onClick={handleGenerateAudio}
+                  disabled={isGeneratingAudio}
+                >
+                  🔄 Regenerate Audio
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -374,61 +569,82 @@ const StudyResult = () => {
         </div>
 
         {/* Interactive Calendar */}
-        {(viewMode === 'calendar' || viewMode === 'combined') && (
-          <div className="calendar-section">
-            <div className="calendar-container">
-              <h3 className="section-title">
-                📅 Interactive Study Calendar
-                <span className="calendar-legend">
-                  <span className="legend-item">
-                    <div className="legend-dot completed"></div>
-                    Completed
-                  </span>
-                  <span className="legend-item">
-                    <div className="legend-dot pending"></div>
-                    Pending
-                  </span>
-                </span>
-              </h3>
-              
-              <div className="calendar-grid">
-                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-                  <div key={day} className="calendar-header">{day}</div>
-                ))}
+{(viewMode === 'calendar' || viewMode === 'combined') && (
+  <div className="calendar-section">
+    <div className="calendar-container">
+      <h3 className="section-title">
+        📅 Interactive Study Calendar
+        <span className="calendar-legend">
+          <span className="legend-item">
+            <div className="legend-dot completed"></div>
+            Completed
+          </span>
+          <span className="legend-item">
+            <div className="legend-dot pending"></div>
+            Pending
+          </span>
+        </span>
+      </h3>
+      
+      <div className="calendar-grid">
+        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+          <div key={day} className="calendar-header">{day}</div>
+        ))}
+        
+        {(() => {
+          const startDate = new Date(calendar.days[0].date);
+          // Get the day of week (0 = Sunday, 1 = Monday, etc.)
+          const startDayOfWeek = startDate.getDay();
+          // Convert to Monday = 0, Tuesday = 1, etc.
+          const mondayBasedStartDay = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+          
+          // Create array to hold all calendar cells
+          const calendarCells = [];
+          
+          // Add empty cells for days before the start date
+          for (let i = 0; i < mondayBasedStartDay; i++) {
+            calendarCells.push(
+              <div key={`empty-${i}`} className="calendar-day empty"></div>
+            );
+          }
+          
+          // Add actual study days
+          calendar.days.forEach((day, index) => {
+            const date = new Date(day.date);
+            const isCompleted = completedDays.has(index);
+            const hasNote = dayNotes[index];
+            
+            calendarCells.push(
+              <div 
+                key={index} 
+                className={`calendar-day interactive ${day.isWeekend ? 'weekend' : 'weekday'} ${isCompleted ? 'completed' : ''}`}
+                onClick={() => toggleDayCompletion(index)}
+              >
+                <div className="day-number">{date.getDate()}</div>
+                <div className="day-info">Day {day.dayNumber}</div>
+                <div className="study-hours">{day.hours}h study</div>
                 
-                {calendar.days.map((day, index) => {
-                  const date = new Date(day.date);
-                  const isCompleted = completedDays.has(index);
-                  const hasNote = dayNotes[index];
-                  
-                  return (
-                    <div 
-                      key={index} 
-                      className={`calendar-day interactive ${day.isWeekend ? 'weekend' : 'weekday'} ${isCompleted ? 'completed' : ''}`}
-                      onClick={() => toggleDayCompletion(index)}
-                    >
-                      <div className="day-number">{date.getDate()}</div>
-                      <div className="day-info">Day {day.dayNumber}</div>
-                      <div className="study-hours">{day.hours}h study</div>
-                      
-                      <div className="day-actions">
-                        {isCompleted && <div className="check-mark">✓</div>}
-                        <button 
-                          className="note-btn"
-                          onClick={(e) => addDayNote(index, e)}
-                          title="Add note"
-                        >
-                          📝
-                        </button>
-                        {hasNote && <div className="note-indicator">💬</div>}
-                      </div>
-                    </div>
-                  );
-                })}
+                <div className="day-actions">
+                  {isCompleted && <div className="check-mark">✓</div>}
+                  <button 
+                    className="note-btn"
+                    onClick={(e) => addDayNote(index, e)}
+                    title="Add note"
+                  >
+                    📝
+                  </button>
+                  {hasNote && <div className="note-indicator">💬</div>}
+                </div>
               </div>
-            </div>
-          </div>
-        )}
+            );
+          });
+          
+          return calendarCells;
+        })()}
+      </div>
+    </div>
+  </div>
+)}
 
         {/* Study Plan Content */}
         {(viewMode === 'plan' || viewMode === 'combined') && (
