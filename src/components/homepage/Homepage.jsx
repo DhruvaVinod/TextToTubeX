@@ -3,6 +3,7 @@ import SearchResults from '../search/SearchResults';
 import StudyPlanner from '../studyplanner/StudyPlanner'; 
 import DiagramExplainer from '../diagramexplainer/DiagramExplainer';
 import Login from '../Login/Login';
+import TutorialOverlay from '../tutorial/TutorialOverlay';
 import { useAuth } from '../../context/AuthContext';
 import './Homepage.css';
 import { useNavigate } from 'react-router-dom';
@@ -20,11 +21,44 @@ const Homepage = () => {
   const [showCamera, setShowCamera] = useState(false);
   const [cameraStream, setCameraStream] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Tutorial states
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState('English');
+  const [tutorialCompleted, setTutorialCompleted] = useState(false);
 
   // Get auth info from context
   const { currentUser, logout, isAuthenticated } = useAuth();
   
   const navigate = useNavigate();
+
+  // Check if tutorial should be shown on first visit
+  useEffect(() => {
+    const hasSeenTutorial = localStorage.getItem('tutorialCompleted');
+    if (!hasSeenTutorial && !tutorialCompleted) {
+      // Show tutorial after a brief delay to ensure page is loaded
+      const timer = setTimeout(() => {
+        setShowTutorial(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [tutorialCompleted]);
+
+  // Tutorial handlers
+  const handleTutorialComplete = () => {
+    setTutorialCompleted(true);
+    localStorage.setItem('tutorialCompleted', 'true');
+    setShowTutorial(false);
+  };
+
+  const handleTutorialClose = () => {
+    setShowTutorial(false);
+  };
+
+  // Add method to restart tutorial (for testing or user request)
+  const restartTutorial = () => {
+    setShowTutorial(true);
+  };
 
   const toggleNav = () => {
     setIsNavOpen(!isNavOpen);
@@ -259,6 +293,14 @@ const Homepage = () => {
 
   return (
     <div className="homepage">
+      {/* Tutorial Overlay */}
+      <TutorialOverlay 
+        isOpen={showTutorial}
+        onClose={handleTutorialClose}
+        onComplete={handleTutorialComplete}
+        selectedLanguage={selectedLanguage}
+      />
+
       {/* Sidebar */}
       <div className={`sidebar ${isNavOpen ? 'open' : ''}`}>
         <div className="sidebar-content">
@@ -287,15 +329,6 @@ const Homepage = () => {
               <span>Previous Summaries</span>
              </div>
             
-            {/* <div className="nav-item" onClick={isAuthenticated ? () => alert('Leaderboards feature coming soon!') : handleLoginRequired}>
-              <div className="nav-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M16 6L18.29 8.29L13.41 13.17L9.41 9.17L2 16.59L3.41 18L9.41 12L13.41 16L19.71 9.71L22 12V6H16Z" fill="currentColor"/>
-                </svg>
-              </div>
-              <span>Leaderboards</span>
-            </div> */}
-            
             <div className="nav-item" onClick={() => {
               if (!isAuthenticated) { 
                 handleLoginRequired();
@@ -309,6 +342,17 @@ const Homepage = () => {
                 </svg>
               </div>
               <span>My Study Plans</span>
+            </div>
+
+            {/* Add Tutorial restart option */}
+            <div className="nav-item" onClick={restartTutorial}>
+              <div className="nav-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M21 12C21 16.9706 16.9706 21 12 21C7.02944 21 3 16.9706 3 12C3 7.02944 7.02944 3 12 3C16.9706 3 21 7.02944 21 12Z" stroke="currentColor" strokeWidth="2"/>
+                  <path d="M12 8V12L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <span>Show Tutorial</span>
             </div>
           </nav>
         </div>
@@ -341,6 +385,42 @@ const Homepage = () => {
           
           <div className="header-center">
             <h1 className="app-title">TextToTube</h1>
+            {/* Help/Tutorial Button */}
+            <button 
+              className="tutorial-help-btn" 
+              onClick={restartTutorial}
+              title="Show Tutorial"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'rgba(255, 255, 255, 0.8)',
+                marginLeft: '15px',
+                cursor: 'pointer',
+                padding: '8px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.3s ease',
+                fontSize: '20px'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                e.target.style.color = 'rgba(255, 255, 255, 1)';
+                e.target.style.transform = 'scale(1.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.background = 'none';
+                e.target.style.color = 'rgba(255, 255, 255, 0.8)';
+                e.target.style.transform = 'scale(1)';
+              }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M12 17h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
           </div>
           
           <div className="header-right">

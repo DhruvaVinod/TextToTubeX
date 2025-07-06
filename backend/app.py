@@ -30,9 +30,12 @@ from werkzeug.utils import secure_filename
 import sys
 from gtts import gTTS
 from flask import send_file
+from googletrans import Translator
 
 from dotenv import load_dotenv
 load_dotenv()
+
+translator = Translator()
 
 app = Flask(__name__)
 @app.after_request
@@ -551,6 +554,9 @@ def search_videos():
         return jsonify({
             'error': str(e)
         }), 500
+    
+
+
 
 @app.route('/api/generate-summary', methods=['POST'])
 def generate_summary():
@@ -1623,6 +1629,98 @@ def generate_audio():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Add these tutorial-specific endpoints to your existing app.py
+
+# Language mapping for gTTS (Google Text-to-Speech)
+GTTS_LANGUAGE_MAP = {
+    'en': 'en',
+    'hi': 'hi',
+    'ta': 'ta',
+    'te': 'te',
+    'kn': 'kn',
+    'ml': 'ml',
+    'bn': 'bn',
+    'gu': 'gu',
+    'mr': 'mr',
+    'pa': 'pa',
+    'ur': 'ur',
+    'or': 'or',  # Odia
+    'as': 'as'   # Assamese
+}
+
+
+@app.route('/api/text-to-speech', methods=['POST'])
+def text_to_speech():
+    """
+    API endpoint to convert text to speech
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'text' not in data:
+            return jsonify({'error': 'Missing text'}), 400
+        
+        text = data['text']
+        language = data.get('language', 'en')
+        
+        # Validate language
+        if language not in GTTS_LANGUAGE_MAP:
+            language = 'en'  # Fallback to English
+        
+        # Limit text length for performance
+        if len(text) > 1000:
+            text = text[:1000]
+        
+        # Generate speech using gTTS
+        tts = gTTS(text=text, lang=GTTS_LANGUAGE_MAP[language], slow=False)
+        
+        # Create audio file in memory
+        audio_buffer = io.BytesIO()
+        tts.write_to_fp(audio_buffer)
+        audio_buffer.seek(0)
+        
+        # Return audio file as response
+        return send_file(
+            audio_buffer,
+            mimetype='audio/mpeg',
+            as_attachment=True,
+            download_name='speech.mp3'
+        )
+    
+    except Exception as e:
+        logging.error(f"Text-to-speech API error: {str(e)}")
+        return jsonify({'error': 'Audio generation failed'}), 500
+
+@app.route('/api/translate-text', methods=['POST'])
+def translate_text_endpoint():
+    """
+    API endpoint to translate individual text
+    """
+    try:
+        data = request.get_json()
+        
+        if not data or 'text' not in data or 'targetLanguage' not in data:
+            return jsonify({'error': 'Missing text or targetLanguage'}), 400
+        
+        text = data['text']
+        target_language = data['targetLanguage']
+        
+        # Validate target language
+        if target_language not in GTTS_LANGUAGE_MAP:
+            return jsonify({'error': 'Unsupported language'}), 400
+        
+        # Translate text
+        translated_text = translate_text_tutorial(text, target_language)
+        
+        return jsonify({
+            'originalText': text,
+            'translatedText': translated_text,
+            'targetLanguage': target_language
+        })
+    
+    except Exception as e:
+        logging.error(f"Text translation API error: {str(e)}")
+        return jsonify({'error': 'Translation failed'}), 500
 
 @app.errorhandler(500)
 def handle_500(e):
