@@ -52,6 +52,7 @@ npm install
 ### 3. Install Firebase Tools (if not already installed)
 ~~~bash
 npm install -g firebase-tools
+npm install file-saver jspdf
 ~~~
 
 ### 4. Install Backend Dependencies
