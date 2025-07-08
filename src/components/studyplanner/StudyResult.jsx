@@ -1,13 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../../firebase';
+import { studyPlansService } from '../../services/studyPlansService';
 import './StudyPlanner.css';
 
 const StudyResult = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { plan, calendar, topic, difficulty, language, languageCode, progress } = location.state || {};
+  const { 
+    plan, 
+    calendar, 
+    topic, 
+    difficulty, 
+    language, 
+    languageCode, 
+    progress, 
+    planId, 
+    isFromFirestore 
+  } = location.state || {};
+  
   const audioRef = useRef(null);
   
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [currentProgress, setCurrentProgress] = useState(progress?.completed || 0);
   const [completedDays, setCompletedDays] = useState(new Set());
   const [viewMode, setViewMode] = useState('combined');
@@ -21,14 +38,14 @@ const StudyResult = () => {
   const [currentNote, setCurrentNote] = useState('');
   const [selectedDay, setSelectedDay] = useState(null);
   const [isSaved, setIsSaved] = useState(false);
-  const [savedPlanId, setSavedPlanId] = useState(null);
+  const [savedPlanId, setSavedPlanId] = useState(planId || null);
   
-  // Audio states - using the language and languageCode from StudyPlanner
+  // Audio states
   const [audioUrl, setAudioUrl] = useState(null);
   const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [audioError, setAudioError] = useState(null);
-  const [audioData, setAudioData] = useState(null); // Base64 audio data
-  const [audioType, setAudioType] = useState(null); // Audio MIME type
+  const [audioData, setAudioData] = useState(null);
+  const [audioType, setAudioType] = useState(null);
   
   const [motivationalQuotes] = useState([
     "🌟 Every expert was once a beginner!",
@@ -38,6 +55,68 @@ const StudyResult = () => {
     "✨ Consistency is the key to mastery!"
   ]);
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
+
+  // Initialize auth state
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setUser(user);
+        // If we have a planId from Firestore, load the full plan data
+        if (isFromFirestore && planId) {
+          await loadPlanFromFirestore(planId);
+        }
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, [navigate, isFromFirestore, planId]);
+
+  // Load plan data from Firestore
+  const loadPlanFromFirestore = async (planId) => {
+    try {
+      const planData = await studyPlansService.getStudyPlan(planId);
+      
+      // Update state with loaded data
+      setCurrentProgress(planData.progress?.completed || 0);
+      setCompletedDays(new Set(planData.completedDays || []));
+      setDayNotes(planData.dayNotes || {});
+      setStudyStreak(planData.studyStreak || 0);
+      setIsSaved(true);
+      setSavedPlanId(planId);
+      
+      // Load audio data if available
+      if (planData.audioData) {
+        setAudioData(planData.audioData);
+        setAudioType(planData.audioType);
+        const url = await base64ToUrl(planData.audioData);
+        setAudioUrl(url);
+      }
+      
+    } catch (error) {
+      console.error('Error loading plan from Firestore:', error);
+      setError('Failed to load study plan. Please try again.');
+    }
+  };
+
+  // Initialize progress tracking
+  useEffect(() => {
+    if (calendar?.totalDays) {
+      const today = new Date();
+      const startDate = new Date(calendar.days[0].date);
+      const endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + calendar.totalDays);
+      
+      const options = { month: 'long', day: 'numeric', year: 'numeric' };
+      setEstimatedCompletion(endDate.toLocaleDateString('en-US', options));
+      setTotalStudyTime(calendar.totalDays * calendar.dailyHours);
+    }
+
+    // Rotate motivational quotes
+    const quoteInterval = setInterval(() => {
+      setCurrentQuoteIndex((prev) => (prev + 1) % motivationalQuotes.length);
+    }, 4000);
+    return () => clearInterval(quoteInterval);
+  }, [calendar, topic, difficulty, motivationalQuotes.length]);
 
   // Helper functions
   const blobToBase64 = (blob) => {
@@ -59,7 +138,7 @@ const StudyResult = () => {
     }
   };
 
-  // Audio generation function using the language from StudyPlanner
+  // Audio generation function
   const fetchAudioUrl = async (text, languageCode) => {
     try {
       const response = await fetch('http://localhost:5000/api/generate-audio', {
@@ -97,8 +176,13 @@ const StudyResult = () => {
       .trim();
   };
 
-  // Handle audio generation using the language from StudyPlanner
+  // Handle audio generation
   const handleGenerateAudio = async () => {
+    if (!user) {
+      alert('Please sign in to generate audio');
+      return;
+    }
+
     if (!plan) {
       setAudioError('No study plan available to convert to audio');
       return;
@@ -118,7 +202,7 @@ const StudyResult = () => {
       
       const audioResult = await fetchAudioUrl(
         cleanText,
-        languageCode // Use the language code passed from StudyPlanner
+        languageCode
       );
       
       if (audioResult) {
@@ -126,9 +210,14 @@ const StudyResult = () => {
         setAudioData(audioResult.data);
         setAudioType(audioResult.type);
         
-        // Auto-save if plan is already saved
+        // Save to Firestore if plan is saved
         if (isSaved && savedPlanId) {
-          updateSavedPlan();
+          await studyPlansService.updateAudioData(
+            savedPlanId, 
+            audioResult.data, 
+            audioResult.type, 
+            languageCode
+          );
         }
       } else {
         setAudioError('Failed to generate audio. Please try again.');
@@ -158,93 +247,74 @@ const StudyResult = () => {
     setAudioError(null);
   }, [plan]);
 
-  useEffect(() => {
-    if (calendar) {
-      const totalHours = calendar.totalDays * calendar.dailyHours;
-      setTotalStudyTime(totalHours);
-      
-      const today = new Date();
-      const startDate = new Date(calendar.days[0].date);
-      const endDate = new Date(startDate);
-      endDate.setDate(startDate.getDate() + calendar.totalDays);
-      
-      const options = { month: 'long', day: 'numeric', year: 'numeric' };
-      setEstimatedCompletion(endDate.toLocaleDateString('en-US', options));
+  // Save study plan to Firestore
+  const handleSave = async () => {
+    if (!user) {
+      alert('Please sign in to save your study plan.');
+      navigate('/login');
+      return;
     }
 
-    checkExistingPlan();
-  }, [calendar, topic, difficulty]);
-
-  useEffect(() => {
-    const quoteInterval = setInterval(() => {
-      setCurrentQuoteIndex((prev) => (prev + 1) % motivationalQuotes.length);
-    }, 4000);
-    return () => clearInterval(quoteInterval);
-  }, [motivationalQuotes.length]);
-
-  // Auto-save progress changes including audio data
-  useEffect(() => {
-    if (isSaved && savedPlanId) {
-      updateSavedPlan();
+    if (!plan || !topic) {
+      alert('No study plan to save');
+      return;
     }
-  }, [currentProgress, completedDays, dayNotes, studyStreak, audioData]);
 
-  const checkExistingPlan = () => {
-    const user = localStorage.getItem('user');
-    if (!user) return;
+    try {
+      setLoading(true);
+      setError(null);
 
-    const savedPlans = JSON.parse(localStorage.getItem('studyPlans') || '[]');
-    const existingPlan = savedPlans.find(plan => 
-      plan.topic === topic && 
-      plan.difficulty === difficulty &&
-      plan.calendar?.totalDays === calendar?.totalDays &&
-      plan.calendar?.dailyHours === calendar?.dailyHours
-    );
-
-    if (existingPlan) {
-      setIsSaved(true);
-      setSavedPlanId(existingPlan.id);
-      setCurrentProgress(existingPlan.progress.completed);
-      setCompletedDays(new Set(existingPlan.completedDays || []));
-      setDayNotes(existingPlan.dayNotes || {});
-      setStudyStreak(existingPlan.studyStreak || 0);
-      
-      // Load saved audio data if available
-      if (existingPlan.audioData) {
-        setAudioData(existingPlan.audioData);
-        setAudioType(existingPlan.audioType);
-        // Convert base64 back to URL for playback
-        base64ToUrl(existingPlan.audioData).then(url => {
-          if (url) {
-            setAudioUrl(url);
-          }
-        });
-      }
-    }
-  };
-
-  const updateSavedPlan = () => {
-    const savedPlans = JSON.parse(localStorage.getItem('studyPlans') || '[]');
-    const planIndex = savedPlans.findIndex(plan => plan.id === savedPlanId);
-    
-    if (planIndex !== -1) {
-      savedPlans[planIndex] = {
-        ...savedPlans[planIndex],
+      const studyPlanData = {
+        topic,
+        difficulty,
+        language,
+        languageCode,
+        plan,
+        calendar,
         progress: { completed: currentProgress, total: calendar?.totalDays || 0 },
         completedDays: Array.from(completedDays),
         dayNotes,
         studyStreak,
         audioData,
         audioType,
-        audioLanguage: languageCode, // Save the language code
-        lastUpdated: new Date().toISOString()
+        hasAudio: !!audioData
       };
+
+      let result;
+      if (isSaved && savedPlanId) {
+        // Update existing plan
+        result = await studyPlansService.updateStudyPlan(savedPlanId, studyPlanData);
+      } else {
+        // Create new plan
+        result = await studyPlansService.createStudyPlan(user.uid, studyPlanData);
+        setSavedPlanId(result.id);
+        setIsSaved(true);
+      }
+
+      setShowCelebration(true);
+      setTimeout(() => {
+        setShowCelebration(false);
+        setTimeout(() => {
+          if (window.confirm('Study plan saved successfully! Would you like to view all your saved plans?')) {
+            navigate('/my-study-plans');
+          }
+        }, 500);
+      }, 2000);
       
-      localStorage.setItem('studyPlans', JSON.stringify(savedPlans));
+    } catch (error) {
+      console.error('Error saving study plan:', error);
+      setError('Failed to save study plan. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const toggleDayCompletion = (dayIndex) => {
+  const toggleDayCompletion = async (dayIndex) => {
+    if (!user) {
+      alert('Please sign in to track progress');
+      return;
+    }
+
     const newCompletedDays = new Set(completedDays);
     
     if (completedDays.has(dayIndex)) {
@@ -263,6 +333,20 @@ const StudyResult = () => {
     
     setCompletedDays(newCompletedDays);
     calculateStreak(newCompletedDays);
+
+    // Update Firestore
+    if (isSaved && savedPlanId) {
+      try {
+        await studyPlansService.updateCompletedDays(savedPlanId, Array.from(newCompletedDays));
+        await studyPlansService.updateProgress(savedPlanId, {
+          completed: newCompletedDays.size,
+          total: calendar?.totalDays || 0
+        });
+      } catch (error) {
+        console.error('Error updating completion status in Firestore:', error);
+        setError('Failed to update completion status. Please try again.');
+      }
+    }
   };
 
   const calculateStreak = (completed) => {
@@ -278,6 +362,13 @@ const StudyResult = () => {
     }
     
     setStudyStreak(streak);
+
+    // Update Firestore
+    if (isSaved && savedPlanId) {
+      studyPlansService.updateStudyStreak(savedPlanId, streak).catch(error => {
+        console.error('Error updating streak in Firestore:', error);
+      });
+    }
   };
 
   const addDayNote = (dayIndex, event) => {
@@ -287,12 +378,24 @@ const StudyResult = () => {
     setShowNotes(true);
   };
 
-  const saveDayNote = () => {
+  const saveDayNote = async () => {
     if (selectedDay !== null && currentNote.trim()) {
-      setDayNotes(prev => ({
-        ...prev,
+      const newDayNotes = {
+        ...dayNotes,
         [selectedDay]: currentNote.trim()
-      }));
+      };
+      
+      setDayNotes(newDayNotes);
+      
+      // Update Firestore
+      if (isSaved && savedPlanId) {
+        try {
+          await studyPlansService.updateDayNotes(savedPlanId, newDayNotes);
+        } catch (error) {
+          console.error('Error saving day note in Firestore:', error);
+          setError('Failed to save note. Please try again.');
+        }
+      }
     }
     setShowNotes(false);
     setCurrentNote('');
@@ -327,67 +430,28 @@ const StudyResult = () => {
     document.body.removeChild(element);
   };
 
-  const handleSave = () => {
-    const user = localStorage.getItem('user');
-
-    if (!user) {
-      alert('Please sign in to save your study plan.');
-      navigate('/');
-      return;
-    }
-
-    if (isSaved) {
-      updateSavedPlan();
-      setShowCelebration(true);
-      setTimeout(() => setShowCelebration(false), 2000);
-      return;
-    }
-
-    const studyPlanData = {
-      id: Date.now(),
-      topic,
-      difficulty,
-      language, // Save the language name
-      plan,
-      calendar,
-      progress: { completed: currentProgress, total: calendar?.totalDays || 0 },
-      completedDays: Array.from(completedDays),
-      dayNotes,
-      createdAt: new Date().toISOString(),
-      lastUpdated: new Date().toISOString(),
-      studyStreak,
-      totalStudyTime,
-      // Audio data
-      audioData: audioData, // Base64 encoded audio
-      audioType: audioType, // MIME type for proper playback
-      audioLanguage: languageCode, // Save the language code
-      hasAudio: !!audioData  // Flag to indicate if audio is available
-    };
-
-    const savedPlans = JSON.parse(localStorage.getItem('studyPlans') || '[]');
-    savedPlans.push(studyPlanData);
-    localStorage.setItem('studyPlans', JSON.stringify(savedPlans));
-    
-    setIsSaved(true);
-    setSavedPlanId(studyPlanData.id);
-    
-    setShowCelebration(true);
-    setTimeout(() => {
-      setShowCelebration(false);
-      setTimeout(() => {
-        if (window.confirm('Study plan saved successfully! Would you like to view all your saved plans?')) {
-          navigate('/my-study-plans');
-        }
-      }, 500);
-    }, 2000);
-  };
-
-  const resetProgress = () => {
+  const resetProgress = async () => {
     if (window.confirm('Are you sure you want to reset all progress? This cannot be undone.')) {
       setCurrentProgress(0);
       setCompletedDays(new Set());
       setStudyStreak(0);
       setDayNotes({});
+      
+      // Update Firestore
+      if (isSaved && savedPlanId) {
+        try {
+          await studyPlansService.updateProgress(savedPlanId, {
+            completed: 0,
+            total: calendar?.totalDays || 0
+          });
+          await studyPlansService.updateCompletedDays(savedPlanId, []);
+          await studyPlansService.updateStudyStreak(savedPlanId, 0);
+          await studyPlansService.updateDayNotes(savedPlanId, {});
+        } catch (error) {
+          console.error('Error resetting progress in Firestore:', error);
+          setError('Failed to reset progress. Please try again.');
+        }
+      }
     }
   };
 
@@ -441,7 +505,7 @@ const StudyResult = () => {
           </div>
         </div>
 
-        {/* Audio Section - using the language from StudyPlanner */}
+        {/* Audio Section */}
         <div className="audio-section">
           <div className="audio-controls">
             <div className="audio-info">
@@ -569,82 +633,77 @@ const StudyResult = () => {
         </div>
 
         {/* Interactive Calendar */}
-{(viewMode === 'calendar' || viewMode === 'combined') && (
-  <div className="calendar-section">
-    <div className="calendar-container">
-      <h3 className="section-title">
-        📅 Interactive Study Calendar
-        <span className="calendar-legend">
-          <span className="legend-item">
-            <div className="legend-dot completed"></div>
-            Completed
-          </span>
-          <span className="legend-item">
-            <div className="legend-dot pending"></div>
-            Pending
-          </span>
-        </span>
-      </h3>
-      
-      <div className="calendar-grid">
-        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
-          <div key={day} className="calendar-header">{day}</div>
-        ))}
-        
-        {(() => {
-          const startDate = new Date(calendar.days[0].date);
-          // Get the day of week (0 = Sunday, 1 = Monday, etc.)
-          const startDayOfWeek = startDate.getDay();
-          // Convert to Monday = 0, Tuesday = 1, etc.
-          const mondayBasedStartDay = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
-          
-          // Create array to hold all calendar cells
-          const calendarCells = [];
-          
-          // Add empty cells for days before the start date
-          for (let i = 0; i < mondayBasedStartDay; i++) {
-            calendarCells.push(
-              <div key={`empty-${i}`} className="calendar-day empty"></div>
-            );
-          }
-          
-          // Add actual study days
-          calendar.days.forEach((day, index) => {
-            const date = new Date(day.date);
-            const isCompleted = completedDays.has(index);
-            const hasNote = dayNotes[index];
-            
-            calendarCells.push(
-              <div 
-                key={index} 
-                className={`calendar-day interactive ${day.isWeekend ? 'weekend' : 'weekday'} ${isCompleted ? 'completed' : ''}`}
-                onClick={() => toggleDayCompletion(index)}
-              >
-                <div className="day-number">{date.getDate()}</div>
-                <div className="day-info">Day {day.dayNumber}</div>
-                <div className="study-hours">{day.hours}h study</div>
+        {(viewMode === 'calendar' || viewMode === 'combined') && (
+          <div className="calendar-section">
+            <div className="calendar-container">
+              <h3 className="section-title">
+                📅 Interactive Study Calendar
+                <span className="calendar-legend">
+                  <span className="legend-item">
+                    <div className="legend-dot completed"></div>
+                    Completed
+                  </span>
+                  <span className="legend-item">
+                    <div className="legend-dot pending"></div>
+                    Pending
+                  </span>
+                </span>
+              </h3>
+              
+              <div className="calendar-grid">
+                {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => (
+                  <div key={day} className="calendar-header">{day}</div>
+                ))}
                 
-                <div className="day-actions">
-                  {isCompleted && <div className="check-mark">✓</div>}
-                  <button 
-                    className="note-btn"
-                    onClick={(e) => addDayNote(index, e)}
-                    title="Add note"
-                  >
-                    📝
-                  </button>
-                  {hasNote && <div className="note-indicator">💬</div>}
-                </div>
+                {(() => {
+                  const startDate = new Date(calendar.days[0].date);
+                  const startDayOfWeek = startDate.getDay();
+                  const mondayBasedStartDay = startDayOfWeek === 0 ? 6 : startDayOfWeek - 1;
+                  
+                  const calendarCells = [];
+                  
+                  for (let i = 0; i < mondayBasedStartDay; i++) {
+                    calendarCells.push(
+                      <div key={`empty-${i}`} className="calendar-day empty"></div>
+                    );
+                  }
+                  
+                  calendar.days.forEach((day, index) => {
+                    const date = new Date(day.date);
+                    const isCompleted = completedDays.has(index);
+                    const hasNote = dayNotes[index];
+                    
+                    calendarCells.push(
+                      <div 
+                        key={index} 
+                        className={`calendar-day interactive ${day.isWeekend ? 'weekend' : 'weekday'} ${isCompleted ? 'completed' : ''}`}
+                        onClick={() => toggleDayCompletion(index)}
+                      >
+                        <div className="day-number">{date.getDate()}</div>
+                        <div className="day-info">Day {day.dayNumber}</div>
+                        <div className="study-hours">{day.hours}h study</div>
+                        
+                        <div className="day-actions">
+                          {isCompleted && <div className="check-mark">✓</div>}
+                          <button 
+                            className="note-btn"
+                            onClick={(e) => addDayNote(index, e)}
+                            title="Add note"
+                          >
+                            📝
+                          </button>
+                          {hasNote && <div className="note-indicator">💬</div>}
+                        </div>
+                      </div>
+                    );
+                  });
+                  
+                  return calendarCells;
+                })()}
               </div>
-            );
-          });
-          
-          return calendarCells;
-        })()}
-      </div>
-    </div>
-  </div>
-)}
+            </div>
+          </div>
+        )}
 
         {/* Study Plan Content */}
         {(viewMode === 'plan' || viewMode === 'combined') && (

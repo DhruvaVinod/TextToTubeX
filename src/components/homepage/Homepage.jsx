@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import SearchResults from '../search/SearchResults';
 import StudyPlanner from '../studyplanner/StudyPlanner'; 
 import DiagramExplainer from '../diagramexplainer/DiagramExplainer';
@@ -10,6 +10,8 @@ import { useNavigate } from 'react-router-dom';
 import Quiz from '../quiz/Quiz';
 
 const Homepage = () => {
+  const recognitionRef = useRef(null);
+  
   const [isNavOpen, setIsNavOpen] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
@@ -21,10 +23,14 @@ const Homepage = () => {
   const [showCamera, setShowCamera] = useState(false);
   const [cameraStream, setCameraStream] = useState(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [speechRecognition, setSpeechRecognition] = useState(null);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [selectedLanguage, setSelectedLanguage] = useState('English');
+  const [availableLanguages, setAvailableLanguages] = useState([]);
   
   // Tutorial states
   const [showTutorial, setShowTutorial] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState('English');
   const [tutorialCompleted, setTutorialCompleted] = useState(false);
 
   // Get auth info from context
@@ -36,13 +42,92 @@ const Homepage = () => {
   useEffect(() => {
     const hasSeenTutorial = localStorage.getItem('tutorialCompleted');
     if (!hasSeenTutorial && !tutorialCompleted) {
-      // Show tutorial after a brief delay to ensure page is loaded
       const timer = setTimeout(() => {
         setShowTutorial(true);
       }, 1000);
       return () => clearTimeout(timer);
     }
   }, [tutorialCompleted]);
+
+  // Check if speech recognition is supported
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      setSpeechSupported(true);
+    } else {
+      setSpeechSupported(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Update recognition language when selectedLanguage changes
+    if (recognitionRef.current && !isListening) {
+      const speechLanguageCodes = {
+        'en': 'en-US',
+        'hi': 'hi-IN',
+        'ta': 'ta-IN', 
+        'te': 'te-IN',
+        'kn': 'kn-IN',
+        'ml': 'ml-IN',
+        'bn': 'bn-IN',
+        'gu': 'gu-IN',
+        'mr': 'mr-IN',
+        'pa': 'pa-IN',
+        'ur': 'ur-PK',
+        'or': 'or-IN',
+        'as': 'as-IN'
+      };
+      
+      const selectedLang = selectedLanguage || 'en';
+      const newLang = speechLanguageCodes[selectedLang] || 'en-US';
+      
+      if (recognitionRef.current.lang !== newLang) {
+        recognitionRef.current.lang = newLang;
+        console.log(`Speech recognition language updated to: ${newLang}`);
+      }
+    }
+  }, [selectedLanguage, isListening]);
+
+  // Initialize and load available languages
+  useEffect(() => {
+    loadAvailableLanguages();
+  }, []);
+
+  const loadAvailableLanguages = async () => {
+    try {
+      const response = await fetch('https://your-app-136108111450.us-central1.run.app/api/supported-languages');
+      const data = await response.json();
+      setAvailableLanguages(data.languages || ['English',
+        'Hindi',
+        'Tamil',
+        'Telugu',
+        'Kannada',
+        'Malayalam',
+        'Bengali',
+        'Gujarati',
+        'Marathi',
+        'Punjabi',
+        'Urdu',
+        'Odia',
+        'Assamese']);
+      setSelectedLanguage(data.default || 'English');
+    } catch (error) {
+      console.error('Error loading supported languages:', error);
+      // Fallback to default languages
+      setAvailableLanguages(['English', 'Hindi',
+        'Tamil',
+        'Telugu',
+        'Kannada',
+        'Malayalam',
+        'Bengali',
+        'Gujarati',
+        'Marathi',
+        'Punjabi',
+        'Urdu',
+        'Odia',
+        'Assamese']);
+    }
+  };
 
   // Tutorial handlers
   const handleTutorialComplete = () => {
@@ -55,7 +140,6 @@ const Homepage = () => {
     setShowTutorial(false);
   };
 
-  // Add method to restart tutorial (for testing or user request)
   const restartTutorial = () => {
     setShowTutorial(true);
   };
@@ -94,7 +178,7 @@ const Homepage = () => {
       
       const imageData = canvas.toDataURL('image/jpeg', 0.8);
       
-      const response = await fetch('http://localhost:5000/api/camera-capture', {
+      const response = await fetch('http://localhost:5001/api/camera-capture', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -161,7 +245,7 @@ const Homepage = () => {
     const formData = new FormData();
     formData.append('image', file);
     
-    fetch('http://localhost:5000/api/upload-image', {
+    fetch('http://localhost:5001/api/upload-image', {
       method: 'POST',
       body: formData,
     })
@@ -262,20 +346,138 @@ const Homepage = () => {
     }
   };
 
+  const handleSpeechInput = () => {
+    if (!speechSupported) {
+      alert('Speech recognition is not supported in your browser');
+      return;
+    }
+
+    if (isListening) {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+      
+      // More specific language codes for better native script support
+      const speechLanguageCodes = {
+        'en': 'en-US',
+        'hi': 'hi-IN',
+        'ta': 'ta-IN',
+        'te': 'te-IN',
+        'kn': 'kn-IN',
+        'ml': 'ml-IN',
+        'bn': 'bn-BD', // Try Bangladesh variant
+        'gu': 'gu-IN',
+        'mr': 'mr-IN',
+        'pa': 'pa-IN',
+        'ur': 'ur-PK',
+        'or': 'or-IN',
+        'as': 'as-IN'
+      };
+
+      const selectedLang = selectedLanguage || 'en';
+      recognition.lang = speechLanguageCodes[selectedLang] || 'en-US';
+      
+      // Browser-specific optimizations
+      const isChrome = /Chrome/.test(navigator.userAgent);
+      const isFirefox = /Firefox/.test(navigator.userAgent);
+      
+      if (isChrome) {
+        // Chrome-specific settings
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 5;
+      } else if (isFirefox) {
+        // Firefox has limited support
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+      }
+      
+      console.log(`Browser: ${navigator.userAgent}`);
+      console.log(`Setting speech language to: ${recognition.lang}`);
+      
+      recognition.onstart = () => {
+        setIsListening(true);
+        // Show language-specific instruction
+        const instructions = {
+          'hi': 'हिंदी में बोलें',
+          'ta': 'தமிழில் பேசுங்கள்',
+          'te': 'తెలుగులో మాట్లాడండి',
+          'kn': 'ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡಿ',
+          'ml': 'മലയാളത്തിൽ സംസാരിക്കുക',
+          'bn': 'বাংলায় বলুন',
+          'gu': 'ગુજરાતીમાં બોલો',
+          'mr': 'मराठीत बोला',
+          'pa': 'ਪੰਜਾਬੀ ਵਿੱਚ ਬੋਲੋ',
+          'ur': 'اردو میں بولیں',
+          'or': 'ଓଡ଼ିଆରେ କୁହନ୍ତୁ',
+          'as': 'অসমীয়াত কওক'
+        };
+        
+        console.log(instructions[selectedLang] || 'Speak now');
+      };
+      
+      recognition.onresult = (event) => {
+        const results = event.results[0];
+        console.log('All recognition results:');
+        
+        // Log all alternatives
+        for (let i = 0; i < results.length; i++) {
+          console.log(`Alternative ${i}: "${results[i].transcript}" (confidence: ${results[i].confidence})`);
+        }
+        
+        // Use the first result (usually the best)
+        const transcript = results[0].transcript;
+        console.log('Selected transcript:', transcript);
+        
+        setSearchText(transcript);
+        setIsListening(false);
+      };
+      
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        setIsListening(false);
+        
+        if (event.error === 'language-not-supported') {
+          alert(`Your browser doesn't support speech recognition for ${selectedLang}. Try:\n• Using Google Chrome\n• Switching to English\n• Using a different device`);
+        } else {
+          alert('Speech recognition error: ' + event.error);
+        }
+      };
+      
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+      
+      recognitionRef.current = recognition;
+      recognition.start();
+      
+    } catch (error) {
+      console.error('Speech recognition initialization error:', error);
+      alert('Speech recognition failed to initialize');
+      setIsListening(false);
+    }
+  };
+
   if (showStudyPlanner) {
     return <StudyPlanner onBack={handleBackFromStudyPlanner} />;
   }
 
   if (showDiagramExplainer) {
     return (
-    <DiagramExplainer 
-      onBack={handleBackFromDiagramExplainer}
-      onSearchYouTube={handleSearchYouTube}
-    />
+      <DiagramExplainer 
+        onBack={handleBackFromDiagramExplainer}
+        onSearchYouTube={handleSearchYouTube}
+      />
     );
   }
   
-
   if (showSearchResults) {
     return (
       <SearchResults 
@@ -452,7 +654,6 @@ const Homepage = () => {
               // Show login buttons when not logged in
               <>
                 <button className="auth-btn signin" onClick={handleSignIn}>Sign In</button>
-                {/* <button className="auth-btn signup" onClick={handleSignUp}>Sign Up</button> */}
               </>
             )}
           </div>
@@ -480,6 +681,9 @@ const Homepage = () => {
                   onChange={(e) => setSearchText(e.target.value)}
                   className="search-input"
                   onKeyPress={(e) => e.key === 'Enter' && handleSearch(e)}
+                  style={{
+                    paddingRight: speechSupported ? '120px' : '60px' // Extra space for speech button
+                  }}
                 />
                 <button type="button" className="search-btn" onClick={handleSearch}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -489,6 +693,91 @@ const Homepage = () => {
                 </button>
               </div>
               
+              {/* Speech-to-Text Button */}
+              {speechSupported && (
+                <button
+                  type="button"
+                  className="speech-btn"
+                  onClick={handleSpeechInput}
+                  disabled={isListening}
+                  style={{
+                    position: 'absolute',
+                    right: '85px',
+                    top: '28%',
+                    transform: 'translateY(-50%)',
+                    background: isListening 
+                      ? 'linear-gradient(45deg, #ff6b6b 0%, #ee5a24 100%)' 
+                      : 'rgba(0, 212, 255, 0.2)',
+                    border: isListening ? '2px solid #ff6b6b' : '2px solid rgba(0, 212, 255, 0.3)',
+                    borderRadius: '50%',
+                    width: '40px',
+                    height: '40px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: isListening ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.3s ease',
+                    zIndex: 10,
+                    boxShadow: isListening ? '0 0 20px rgba(255, 107, 107, 0.4)' : 'none'
+                  }}
+                  title={isListening ? 'Listening... Click to stop' : 'Click to speak your topic'}
+                >
+                  🎤
+                </button>
+              )}
+                  
+              {/* Speech Status Indicator */}
+              {isListening && (
+                <div style={{
+                  position: 'fixed',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  background: 'rgba(0, 0, 0, 0.9)',
+                  padding: '30px',
+                  borderRadius: '20px',
+                  border: '2px solid #ff6b6b',
+                  color: '#ffffff',
+                  textAlign: 'center',
+                  zIndex: 1000,
+                  boxShadow: '0 10px 30px rgba(255, 107, 107, 0.3)'
+                }}>
+                  <div style={{
+                    width: '60px',
+                    height: '60px',
+                    background: 'linear-gradient(45deg, #ff6b6b 0%, #ee5a24 100%)',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    margin: '0 auto 20px',
+                    animation: 'pulse 1s infinite'
+                  }}>
+                    🎤
+                  </div>
+                  <h3 style={{ margin: '0 0 10px 0', fontSize: '1.2rem', fontWeight: '600' }}>
+                    🎤 Listening...
+                  </h3>
+                  <p style={{ margin: '0', fontSize: '0.9rem', opacity: 0.8 }}>
+                    Speak your quiz topic now
+                  </p>
+                  <button
+                    onClick={handleSpeechInput}
+                    style={{
+                      marginTop: '15px',
+                      padding: '10px 20px',
+                      background: 'rgba(255, 255, 255, 0.1)',
+                      border: '1px solid rgba(255, 255, 255, 0.3)',
+                      borderRadius: '10px',
+                      color: '#ffffff',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Stop Listening
+                  </button>
+                </div>
+              )}
+     
               <div className="action-buttons">
                 <button type="button" className="action-btn scan-btn" onClick={handleScanText}>
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -525,7 +814,7 @@ const Homepage = () => {
                 <div className="feature-icon">🧠</div>
                 <h3>Smart Quizzes</h3>
                 <p>Generate personalized quizzes from your materials</p>
-                </div>
+              </div>
             </div>
 
             {showCamera && (

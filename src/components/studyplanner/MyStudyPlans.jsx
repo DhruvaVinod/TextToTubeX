@@ -1,53 +1,109 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../../firebase';
+import { studyPlansService } from '../../services/studyPlansService';
 import './StudyPlans.css'; // Import the CSS file
 
 const MyStudyPlans = () => {
   const navigate = useNavigate();
   const [plans, setPlans] = useState([]);
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [planToDelete, setPlanToDelete] = useState(null);
   const [filter, setFilter] = useState('all'); // 'all', 'completed', 'in-progress'
 
   useEffect(() => {
-    const loggedInUser = localStorage.getItem('user');
-    if (!loggedInUser) {
-      alert('Please sign in to view your study plans.');
-      navigate('/');
-      return;
-    }
-    setUser(loggedInUser);
-    loadPlans();
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      console.log('Auth state changed:', currentUser);
+      if (currentUser) {
+        setUser(currentUser);
+        try {
+          await loadPlans(currentUser.uid);
+        } catch (err) {
+          console.error('Error loading plans:', err);
+          setError('Failed to load study plans. Please try again.');
+        }
+      } else {
+        console.log('No user, redirecting...');
+        navigate('/');
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, [navigate]);
 
-  const loadPlans = () => {
-    const savedPlans = JSON.parse(localStorage.getItem('studyPlans') || '[]');
-    // Sort by last updated (most recent first)
-    const sortedPlans = savedPlans.sort((a, b) => 
-      new Date(b.lastUpdated || b.createdAt) - new Date(a.lastUpdated || a.createdAt)
-    );
-    setPlans(sortedPlans);
+  const loadPlans = async (userId) => {
+    console.log('Loading plans for user:', userId);
+    try {
+      setLoading(true);
+      setError(null);
+      const userPlans = await studyPlansService.getUserStudyPlans(userId);
+      console.log('Plans loaded:', userPlans);
+      setPlans(userPlans);
+    } catch (error) {
+      console.error('Detailed error loading plans:', {
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+
+  const safeConvertTimestamp = (timestamp) => {
+    if (!timestamp) return new Date().toISOString();
+    if (typeof timestamp === 'string') return timestamp;
+    if (timestamp.toDate) return timestamp.toDate().toISOString();
+    return new Date(timestamp).toISOString();
   };
 
-  const updateProgress = (index, change) => {
-    const updated = [...plans];
-    const oldCompleted = updated[index].progress.completed;
-    updated[index].progress.completed = Math.max(0, Math.min(
-      updated[index].progress.total,
-      updated[index].progress.completed + change
-    ));
-    
-    // Update last modified timestamp
-    updated[index].lastUpdated = new Date().toISOString();
-    
-    setPlans(updated);
-    localStorage.setItem('studyPlans', JSON.stringify(updated));
+  const updateProgress = async (planId, change) => {
+    try {
+      const planIndex = plans.findIndex(plan => plan.id === planId);
+      if (planIndex === -1) return;
 
-    // Show celebration for completion
-    if (updated[index].progress.completed === updated[index].progress.total && 
-        oldCompleted < updated[index].progress.total) {
-      showCompletionCelebration(updated[index].topic);
+      const plan = plans[planIndex];
+      const oldCompleted = plan.progress.completed;
+      const newCompleted = Math.max(0, Math.min(
+        plan.progress.total,
+        plan.progress.completed + change
+      ));
+
+      // Update local state immediately for better UX
+      const updatedPlans = [...plans];
+      updatedPlans[planIndex] = {
+        ...plan,
+        progress: {
+          ...plan.progress,
+          completed: newCompleted
+        },
+        lastUpdated: new Date().toISOString()
+      };
+      setPlans(updatedPlans);
+
+      // Update in Firestore
+      await studyPlansService.updateProgress(planId, {
+        completed: newCompleted,
+        total: plan.progress.total
+      });
+
+      // Show celebration for completion
+      if (newCompleted === plan.progress.total && oldCompleted < plan.progress.total) {
+        showCompletionCelebration(plan.topic);
+      }
+    } catch (error) {
+      console.error('Error updating progress:', error);
+      setError('Failed to update progress. Please try again.');
+      if (user) {
+        await loadPlans(user.uid);
+      }
     }
   };
 
@@ -69,17 +125,23 @@ const MyStudyPlans = () => {
     }, 3000);
   };
 
-  const confirmDelete = (planIndex) => {
-    setPlanToDelete(planIndex);
+  const confirmDelete = (planId) => {
+    setPlanToDelete(planId);
     setShowDeleteModal(true);
   };
 
-  const deletePlan = () => {
-    const updated = plans.filter((_, index) => index !== planToDelete);
-    setPlans(updated);
-    localStorage.setItem('studyPlans', JSON.stringify(updated));
-    setShowDeleteModal(false);
-    setPlanToDelete(null);
+  const deletePlan = async () => {
+    try {
+      await studyPlansService.deleteStudyPlan(planToDelete);
+      setPlans(plans.filter(plan => plan.id !== planToDelete));
+      setShowDeleteModal(false);
+      setPlanToDelete(null);
+    } catch (error) {
+      console.error('Error deleting plan:', error);
+      setError('Failed to delete plan. Please try again.');
+      setShowDeleteModal(false);
+      setPlanToDelete(null);
+    }
   };
 
   const cancelDelete = () => {
@@ -95,21 +157,48 @@ const MyStudyPlans = () => {
         calendar: plan.calendar,
         topic: plan.topic,
         difficulty: plan.difficulty,
-        progress: plan.progress
+        language: plan.language,
+        languageCode: plan.languageCode,
+        progress: plan.progress,
+        planId: plan.id, // Pass the Firestore document ID
+        isFromFirestore: true // Flag to indicate this is from Firestore
       }
     });
   };
 
-  const resetPlanProgress = (index) => {
+  const resetPlanProgress = async (planId) => {
     if (window.confirm('Are you sure you want to reset all progress for this plan? This cannot be undone.')) {
-      const updated = [...plans];
-      updated[index].progress.completed = 0;
-      updated[index].completedDays = [];
-      updated[index].dayNotes = {};
-      updated[index].studyStreak = 0;
-      updated[index].lastUpdated = new Date().toISOString();
-      setPlans(updated);
-      localStorage.setItem('studyPlans', JSON.stringify(updated));
+      try {
+        const planIndex = plans.findIndex(plan => plan.id === planId);
+        if (planIndex === -1) return;
+
+        // Update local state
+        const updatedPlans = [...plans];
+        updatedPlans[planIndex] = {
+          ...updatedPlans[planIndex],
+          progress: { ...updatedPlans[planIndex].progress, completed: 0 },
+          completedDays: [],
+          dayNotes: {},
+          studyStreak: 0,
+          lastUpdated: new Date().toISOString()
+        };
+        setPlans(updatedPlans);
+
+        // Update in Firestore
+        await studyPlansService.updateStudyPlan(planId, {
+          progress: { completed: 0, total: updatedPlans[planIndex].progress.total },
+          completedDays: [],
+          dayNotes: {},
+          studyStreak: 0
+        });
+      } catch (error) {
+        console.error('Error resetting progress:', error);
+        setError('Failed to reset progress. Please try again.');
+        // Reload plans to get the correct state
+        if (user) {
+          await loadPlans(user.uid);
+        }
+      }
     }
   };
 
@@ -119,8 +208,9 @@ const MyStudyPlans = () => {
     } else if (filter === 'in-progress') {
       return plan.progress.completed < plan.progress.total;
     }
-    return true; // 'all'
+    return true;
   });
+
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Unknown';
@@ -141,6 +231,61 @@ const MyStudyPlans = () => {
     if (percentage >= 25) return '#f97316'; // orange
     return '#ff4757'; // red
   };
+
+  if (loading) {
+    return (
+      <div className="my-study-plans">
+        <header className="study-plans-header">
+          <button onClick={() => navigate(-1)} className="back-btn">
+            ← Back
+          </button>
+          <h1 className="study-plans-title">📘 My Study Plans</h1>
+        </header>
+        <div className="study-plans-container">
+          <div className="loading-state">
+            <div className="loading-spinner"></div>
+            <p>Loading your study plans...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="my-study-plans">
+        <header className="study-plans-header">
+          <button onClick={() => navigate(-1)} className="back-btn">
+            ← Back
+          </button>
+          <h1 className="study-plans-title">📘 My Study Plans</h1>
+        </header>
+        <div className="study-plans-container">
+          <div className="error-state">
+            <div className="error-icon">⚠️</div>
+            <p>{error}</p>
+            <button 
+              className="retry-btn"
+              onClick={() => user && loadPlans(user.uid)}
+            >
+              Try Again
+            </button>
+            <button 
+              className="retry-btn"
+              onClick={() => {
+                console.log('Current auth state:', auth.currentUser);
+                console.log('Attempting to reload plans...');
+                if (user) loadPlans(user.uid);
+              }}
+            >
+              Debug Reload
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <div className="my-study-plans">
@@ -205,13 +350,13 @@ const MyStudyPlans = () => {
           </div>
         ) : (
           <div className="plans-grid">
-            {filteredPlans.map((plan, index) => {
+            {filteredPlans.map((plan) => {
               const progressPercentage = (plan.progress.completed / plan.progress.total) * 100;
               const isCompleted = plan.progress.completed === plan.progress.total;
               
               return (
                 <div
-                  key={plan.id || index}
+                  key={plan.id}
                   className={`plan-card ${isCompleted ? 'completed' : ''}`}
                 >
                   {/* Completion Badge */}
@@ -233,6 +378,7 @@ const MyStudyPlans = () => {
                     <div className="plan-meta">
                       <span>📅 {plan.calendar?.totalDays || 0} days</span>
                       <span>⏰ {plan.calendar?.dailyHours || 0}h/day</span>
+                      {plan.language && <span>🌍 {plan.language}</span>}
                       <span>🔄 Updated: {formatDate(plan.lastUpdated || plan.createdAt)}</span>
                     </div>
                   </div>
@@ -261,7 +407,7 @@ const MyStudyPlans = () => {
                     {/* Progress Controls */}
                     <div className="progress-controls">
                       <button
-                        onClick={() => updateProgress(plans.indexOf(plan), -1)}
+                        onClick={() => updateProgress(plan.id, -1)}
                         disabled={plan.progress.completed <= 0}
                         className="progress-btn decrease"
                         title="Decrease progress"
@@ -269,7 +415,7 @@ const MyStudyPlans = () => {
                         −
                       </button>
                       <button
-                        onClick={() => updateProgress(plans.indexOf(plan), 1)}
+                        onClick={() => updateProgress(plan.id, 1)}
                         disabled={plan.progress.completed >= plan.progress.total}
                         className="progress-btn increase"
                         title="Increase progress"
@@ -288,14 +434,14 @@ const MyStudyPlans = () => {
                       👁️ View Details
                     </button>
                     <button
-                      onClick={() => resetPlanProgress(plans.indexOf(plan))}
+                      onClick={() => resetPlanProgress(plan.id)}
                       className="action-btn reset"
                       title="Reset progress"
                     >
                       🔄
                     </button>
                     <button
-                      onClick={() => confirmDelete(plans.indexOf(plan))}
+                      onClick={() => confirmDelete(plan.id)}
                       className="action-btn delete"
                       title="Delete plan"
                     >
