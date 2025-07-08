@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import './SearchResults.css';
 import { useNavigate } from 'react-router-dom';
+import { saveSummaryToFirestore } from '../../services/firestoreServices';
+import { useAuth } from '../../context/AuthContext';
 
 const SearchResults = ({ searchQuery, onBack }) => {
   const navigate = useNavigate();
-
+  const { currentUser, isAuthenticated } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [currentFactIndex, setCurrentFactIndex] = useState(0);
   const [showResults, setShowResults] = useState(false);
@@ -604,8 +606,8 @@ const handleGenerateAudio = async () => {
   };
 
   const handleSaveSummary = async () => {
-  const user = localStorage.getItem('user');
-  if (!user || !summaryData || !selectedVideo) {
+  // Check authentication using AuthContext instead of localStorage
+  if (!isAuthenticated || !currentUser || !summaryData || !selectedVideo) {
     alert('Please make sure you are logged in and have a summary to save.');
     return;
   }
@@ -614,8 +616,8 @@ const handleGenerateAudio = async () => {
     setIsSaving(true);
     
     const summaryToSave = {
-      id: Date.now(),
-      userId: user,
+      // Remove the manual ID - Firestore will generate one
+      userId: currentUser.uid, // Use Firebase user ID
       videoId: selectedVideo.id,
       videoTitle: selectedVideo.title,
       videoChannel: selectedVideo.channel,
@@ -634,10 +636,11 @@ const handleGenerateAudio = async () => {
       hasAudio: !!audioData  // Flag to indicate if audio is available
     };
 
-    const savedSummaries = JSON.parse(localStorage.getItem('savedSummaries') || '[]');
-    savedSummaries.push(summaryToSave);
-    localStorage.setItem('savedSummaries', JSON.stringify(savedSummaries));
-
+    // Save to Firestore instead of localStorage
+    const savedSummary = await saveSummaryToFirestore(currentUser.uid, summaryToSave);
+    
+    console.log('Summary saved to Firestore:', savedSummary);
+    
     setIsSaved(true);
     alert('Summary saved successfully!');
   } catch (error) {
