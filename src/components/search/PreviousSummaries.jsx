@@ -1,15 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import { 
-  getSummariesFromFirestore, 
-  deleteSummaryFromFirestore 
-} from '../../services/firestoreServices';
 import './PreviousSummaries.css';
 
 const PreviousSummaries = ({ onBack }) => {
   const navigate = useNavigate();
-  const { currentUser, isAuthenticated } = useAuth();
   const [savedSummaries, setSavedSummaries] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -56,69 +50,60 @@ const PreviousSummaries = ({ onBack }) => {
     }
   };
 
-  const loadSavedSummaries = useCallback(async () => {
-  try {
-    setIsLoading(true);
-    setError(null);
-    
-    if (!isAuthenticated || !currentUser) {
-      setSavedSummaries([]);
+  const loadSavedSummaries = () => {
+    try {
+      const user = localStorage.getItem('user');
+      if (user) {
+        const savedSummaries = JSON.parse(localStorage.getItem('savedSummaries') || '[]');
+        const userSummaries = savedSummaries.filter(summary => summary.userId === user);
+        
+        // Process summaries and create audio URLs
+        const processedSummaries = userSummaries.map(summary => {
+          if (summary.audioData && summary.audioType) {
+            const audioUrl = createAudioUrl(summary.audioData, summary.audioType);
+            console.log('Created audio URL for summary:', summary.id, audioUrl); // Debug log
+            return { ...summary, audioUrl };
+          }
+          return summary;
+        });
+        
+        setSavedSummaries(processedSummaries);
+        
+        // Store audio URLs for cleanup
+        const urls = {};
+        processedSummaries.forEach(summary => {
+          if (summary.audioUrl) {
+            urls[summary.id] = summary.audioUrl;
+          }
+        });
+        setAudioUrls(urls);
+      } else {
+        setSavedSummaries([]);
+      }
+    } catch (error) {
+      console.error('Error loading summaries:', error);
+      setError('Failed to load summaries');
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    console.log('Fetching summaries for user:', currentUser.uid);
-    const summariesFromFirestore = await getSummariesFromFirestore(currentUser.uid);
-    
-    console.log('Fetched summaries:', summariesFromFirestore);
-    
-    // Process summaries (keep your existing audio processing)
-    const processedSummaries = summariesFromFirestore.map(summary => {
-      // ... your existing audio processing logic
-      return summary;
-    });
-    
-    setSavedSummaries(processedSummaries);
-    
-  } catch (error) {
-    console.error('Error loading summaries:', error);
-    setError('Failed to load summaries. Please try again.');
-  } finally {
-    setIsLoading(false);
-  }
-}, [isAuthenticated, currentUser]);
+  };
 
   useEffect(() => {
-    // Add a small delay to ensure auth state is properly initialized
-    const timer = setTimeout(() => {
-      loadSavedSummaries();
-    }, 100);
+    loadSavedSummaries();
     
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [loadSavedSummaries]);
-
-  // Cleanup audio URLs when component unmounts or audioUrls changes
-  useEffect(() => {
+    // Cleanup function to revoke object URLs when component unmounts
     return () => {
       Object.values(audioUrls).forEach(url => {
         if (url) URL.revokeObjectURL(url);
       });
     };
-  }, [audioUrls]);
+  }, []);
 
-  const handleDeleteSummary = async (summaryId) => {
+  const handleDeleteSummary = (summaryId) => {
     try {
-      if (!isAuthenticated || !currentUser) {
+      const user = localStorage.getItem('user');
+      if (!user) {
         alert('Please sign in to delete summaries.');
-        return;
-      }
-
-      // Find the summary to get its firestoreId
-      const summaryToDelete = savedSummaries.find(s => s.id === summaryId);
-      if (!summaryToDelete) {
-        console.error('Summary not found:', summaryId);
         return;
       }
 
@@ -132,8 +117,14 @@ const PreviousSummaries = ({ onBack }) => {
         });
       }
 
-      // Delete from Firestore
-      await deleteSummaryFromFirestore(currentUser.uid, summaryToDelete.firestoreId);
+      // Get saved summaries from localStorage
+      const savedSummaries = JSON.parse(localStorage.getItem('savedSummaries') || '[]');
+      
+      // Filter out the summary to delete
+      const updatedSummaries = savedSummaries.filter(summary => summary.id !== summaryId);
+      
+      // Save back to localStorage
+      localStorage.setItem('savedSummaries', JSON.stringify(updatedSummaries));
       
       // Update local state
       setSavedSummaries(prev => prev.filter(summary => summary.id !== summaryId));
@@ -142,7 +133,6 @@ const PreviousSummaries = ({ onBack }) => {
       if (selectedSummary && selectedSummary.id === summaryId) {
         setSelectedSummary(null);
       }
-      
     } catch (error) {
       console.error('Error deleting summary:', error);
       alert('Failed to delete summary. Please try again.');
@@ -150,35 +140,25 @@ const PreviousSummaries = ({ onBack }) => {
   };
 
   const handleDownloadSummary = (summary) => {
-    try {
-      const element = document.createElement('a');
-      const file = new Blob([summary.content], { type: 'text/plain' });
-      element.href = URL.createObjectURL(file);
-      element.download = `${summary.videoTitle.substring(0, 50)}_summary.txt`;
-      document.body.appendChild(element);
-      element.click();
-      document.body.removeChild(element);
-      URL.revokeObjectURL(element.href); // Clean up
-    } catch (error) {
-      console.error('Error downloading summary:', error);
-      alert('Failed to download summary. Please try again.');
-    }
+    const element = document.createElement('a');
+    const file = new Blob([summary.content], { type: 'text/plain' });
+    element.href = URL.createObjectURL(file);
+    element.download = `${summary.videoTitle.substring(0, 50)}_summary.txt`;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+    URL.revokeObjectURL(element.href); // Clean up
   };
 
   const formatDate = (dateString) => {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch (error) {
-      console.error('Error formatting date:', error);
-      return 'Invalid date';
-    }
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const formatLanguage = (languageCode) => {
@@ -199,31 +179,6 @@ const PreviousSummaries = ({ onBack }) => {
     };
     return languages[languageCode] || languageCode;
   };
-
-  // Show sign-in message if user is not authenticated
-  if (!isAuthenticated) {
-    return (
-      <div className="previous-summaries">
-        <div className="summaries-header">
-          <button className="back-btn" onClick={handleBack}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M19 12H5M12 19L5 12L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </button>
-          <h2>Previous Summaries</h2>
-        </div>
-        
-        <div className="auth-required">
-          <div className="auth-icon">🔐</div>
-          <h3>Sign In Required</h3>
-          <p>Please sign in to view your saved summaries.</p>
-          <button className="sign-in-btn" onClick={() => navigate('/')}>
-            Go to Sign In
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   if (isLoading) {
     return (

@@ -94,7 +94,7 @@ const StudyPlanner = ({ onBack }) => {
     setFormCompletion((filledFields / totalFields) * 100);
   }, [formData]);
 
-  const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyDDwEucj4KNsnUT4m4qpt1pwnByhm6_vjM`;
+  const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyANiYqCnWHH6J1aAdNgH4ZRYH-NBUmIzAE`;
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;

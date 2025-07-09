@@ -141,7 +141,7 @@ const StudyResult = () => {
   // Audio generation function
   const fetchAudioUrl = async (text, languageCode) => {
     try {
-      const response = await fetch('http://localhost:5000/api/generate-audio', {
+      const response = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/generate-audio', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, language_code: languageCode })

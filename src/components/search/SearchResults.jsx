@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import './SearchResults.css';
 import { useNavigate } from 'react-router-dom';
-import { saveSummaryToFirestore } from '../../services/firestoreServices';
-import { useAuth } from '../../context/AuthContext';
 
 const SearchResults = ({ searchQuery, onBack }) => {
   const navigate = useNavigate();
-  const { currentUser, isAuthenticated } = useAuth();
+
   const [isLoading, setIsLoading] = useState(true);
   const [currentFactIndex, setCurrentFactIndex] = useState(0);
   const [showResults, setShowResults] = useState(false);
@@ -293,7 +291,7 @@ Assamese: {
 
   const fetchAudioUrl = async (text, languageCode) => {
   try {
-    const response = await fetch('http://localhost:5000/api/generate-audio', {
+    const response = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/generate-audio', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, language_code: languageCode })
@@ -370,7 +368,7 @@ const handleGenerateAudio = async () => {
   // Function to search YouTube videos
   const searchYouTubeVideos = async (query) => {
     try {
-      const response = await fetch('http://localhost:5000/api/search-videos', {
+      const response = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/search-videos', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -393,7 +391,7 @@ const handleGenerateAudio = async () => {
   // Function to generate summary
   const generateSummary = async (videoId, language) => {
     try {
-      const response = await fetch('http://localhost:5000/api/generate-summary', {
+      const response = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/generate-summary', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -606,8 +604,8 @@ const handleGenerateAudio = async () => {
   };
 
   const handleSaveSummary = async () => {
-  // Check authentication using AuthContext instead of localStorage
-  if (!isAuthenticated || !currentUser || !summaryData || !selectedVideo) {
+  const user = localStorage.getItem('user');
+  if (!user || !summaryData || !selectedVideo) {
     alert('Please make sure you are logged in and have a summary to save.');
     return;
   }
@@ -616,8 +614,8 @@ const handleGenerateAudio = async () => {
     setIsSaving(true);
     
     const summaryToSave = {
-      // Remove the manual ID - Firestore will generate one
-      userId: currentUser.uid, // Use Firebase user ID
+      id: Date.now(),
+      userId: user,
       videoId: selectedVideo.id,
       videoTitle: selectedVideo.title,
       videoChannel: selectedVideo.channel,
@@ -636,11 +634,10 @@ const handleGenerateAudio = async () => {
       hasAudio: !!audioData  // Flag to indicate if audio is available
     };
 
-    // Save to Firestore instead of localStorage
-    const savedSummary = await saveSummaryToFirestore(currentUser.uid, summaryToSave);
-    
-    console.log('Summary saved to Firestore:', savedSummary);
-    
+    const savedSummaries = JSON.parse(localStorage.getItem('savedSummaries') || '[]');
+    savedSummaries.push(summaryToSave);
+    localStorage.setItem('savedSummaries', JSON.stringify(savedSummaries));
+
     setIsSaved(true);
     alert('Summary saved successfully!');
   } catch (error) {

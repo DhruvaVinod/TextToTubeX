@@ -81,7 +81,7 @@ const TutorialOverlay = ({ isOpen, onClose, onComplete, selectedLanguage = 'Engl
       const cleanTitle = removeEmojis(stepContent.title);
       const cleanContent = removeEmojis(stepContent.content);
       
-      const response = await fetch('http://localhost:5000/api/text-to-speech', {
+      const response = await fetch('https://youtube-analyzer-136108111450.us-central1.run.app/api/text-to-speech', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

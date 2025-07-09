@@ -41,7 +41,7 @@ app = Flask(__name__)
 @app.after_request
 def after_request(response):
     # Allow specific origin (replace with your frontend URL)
-    response.headers.add('Access-Control-Allow-Origin',  'http://localhost:3000')
+    response.headers.add('Access-Control-Allow-Origin',  'https://youtube-analyzer-136108111450.us-central1.run.app')
     
     # Allow methods
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
